@@ -1,0 +1,74 @@
+{
+  "index_patterns": ["events-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "index.refresh_interval": "5s",
+      "analysis": {
+        "analyzer": {
+          "default": {
+            "type": "standard",
+            "stopwords": "_english_"
+          },
+          "log_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "stop", "snowball"]
+          }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "forwarder_id": {
+          "type": "keyword"
+        },
+        "source": {
+          "type": "keyword"
+        },
+        "sourcetype": {
+          "type": "keyword"
+        },
+        "host": {
+          "type": "keyword"
+        },
+        "raw_message": {
+          "type": "text",
+          "analyzer": "log_analyzer",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 256
+            }
+          }
+        },
+        "timestamp": {
+          "type": "date",
+          "format": "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        },
+        "severity": {
+          "type": "keyword"
+        },
+        "parsed_fields": {
+          "type": "object",
+          "enabled": true
+        },
+        "enriched_fields": {
+          "type": "object",
+          "enabled": true
+        },
+        "elasticsearch_id": {
+          "type": "keyword"
+        },
+        "indexed": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "date",
+          "format": "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        }
+      }
+    }
+  }
+}

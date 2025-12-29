@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logforwarder
+  labels:
+    name: logforwarder
+    environment: production
+  annotations:
+    description: "Log Forwarder monitoring system namespace"
+    managed-by: "terraform"

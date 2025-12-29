@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logforwarder.fullname" . }}
+  labels:
+    {{- include "logforwarder.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "logforwarder.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "logforwarder.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "logforwarder.serviceAccountName" . }}
+      containers:
+      - name: {{ .Chart.Name }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: actuator
+          containerPort: 8081
+          protocol: TCP
+        env:
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-db
+              key: url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-db
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-db
+              key: password
+        - name: SPRING_ELASTICSEARCH_REST_URIS
+          value: {{ .Values.config.elasticsearch.uri }}
+        - name: SPRING_ELASTICSEARCH_USERNAME
+          value: {{ .Values.config.elasticsearch.username }}
+        - name: SPRING_ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-elasticsearch
+              key: password
+        - name: SPRING_REDIS_HOST
+          value: {{ .Values.config.redis.host }}
+        - name: SPRING_REDIS_PORT
+          value: {{ .Values.config.redis.port | quote }}
+        - name: SPRING_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-redis
+              key: password
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: {{ .Values.config.kafka.bootstrapServers }}
+        - name: APP_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "logforwarder.fullname" . }}-jwt
+              key: secret
+        - name: APP_WEBSOCKET_ALLOWED_ORIGINS
+          value: {{ .Values.config.websocket.allowedOrigins }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- with .Values.volumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}

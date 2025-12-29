@@ -1,0 +1,126 @@
+# Build & Compilation Artifacts
+target/
+build/
+out/
+dist/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.rar
+*.exe
+*.so
+*.dll
+*.dylib
+*.jnilib
+
+# Maven
+.m2/
+.maven/
+.mvn/
+pom.xml.releaseBackup
+release.properties
+maven-release.properties
+maven-error.log
+maven-compile.log
+dependency-reduced-pom.xml
+
+# IDE & Editor Files
+.idea/
+.vscode/
+.zencoder/
+.classpath
+.project
+.settings/
+.factorypath
+.sts4-cache/
+.vscode-test/
+*.swp
+*.swo
+*.iml
+*.iws
+*.ipr
+.c9/
+*.sublime-workspace
+
+# Environment & Configuration
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs & Outputs
+logs/
+log/
+*.log
+test_output.log
+test_output.txt
+test_result.log
+compile_output.log
+build.log
+hs_err_*.log
+replay_*.log
+
+# Temporary & Cache Files
+*.tmp
+*.temp
+.cache/
+.gradle/
+.nyc_output/
+coverage/
+
+# Test Artifacts
+*.jmx
+TestBcrypt.java
+GenerateBcrypt.class
+load-test-*.jmx
+test-*.json
+test-*.ps1
+jacoco.exec
+
+# Git
+.git_disabled/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# OS Files
+.DS_Store
+Thumbs.db
+.Thumbs.db
+.AppleDouble
+.LSOverride
+ehthumbs.db
+
+# Node (if used)
+node_modules/
+package-lock.json
+yarn.lock
+.npm
+
+# Protoc Dependencies (generated)
+protoc-dependencies/
+protoc-plugins/
+
+# Protocol Buffer Generated Sources (in target)
+generated-sources/
+generated-test-sources/
+
+# Spring Boot
+spring-boot-devtools.properties
+.attach_*
+
+# Misc Development Files
+*.md.bak
+*.sql.bak
+*.orig
+*.rej
+
+# Documentation Build
+site/
+
+# Markdown Files (excluding README.md)
+*.md
+!README.md

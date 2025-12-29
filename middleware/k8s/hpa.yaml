@@ -1,0 +1,108 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: logforwarder-middleware-hpa
+  namespace: logforwarder
+  labels:
+    app: logforwarder-middleware
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: logforwarder-middleware
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1k"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: logforwarder-middleware-pdb
+  namespace: logforwarder
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: logforwarder-middleware
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: logforwarder-middleware
+  namespace: logforwarder
+  labels:
+    app: logforwarder-middleware
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: logforwarder-middleware
+  namespace: logforwarder
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: logforwarder-middleware
+  namespace: logforwarder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: logforwarder-middleware
+subjects:
+- kind: ServiceAccount
+  name: logforwarder-middleware
+  namespace: logforwarder

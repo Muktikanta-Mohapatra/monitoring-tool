@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logforwarder-middleware
+  namespace: logforwarder
+  labels:
+    app: logforwarder-middleware
+    version: v1
+  annotations:
+    description: "Log Forwarder Middleware API Server"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: logforwarder-middleware
+  template:
+    metadata:
+      labels:
+        app: logforwarder-middleware
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: logforwarder-middleware
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: middleware
+        image: logforwarder/middleware:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: actuator
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-db-credentials
+              key: url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-db-credentials
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-db-credentials
+              key: password
+        - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+          value: "30"
+        - name: SPRING_ELASTICSEARCH_REST_URIS
+          valueFrom:
+            configMapKeyRef:
+              name: logforwarder-config
+              key: elasticsearch-uri
+        - name: SPRING_ELASTICSEARCH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-elasticsearch-credentials
+              key: username
+        - name: SPRING_ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-elasticsearch-credentials
+              key: password
+        - name: SPRING_REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: logforwarder-config
+              key: redis-host
+        - name: SPRING_REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: logforwarder-config
+              key: redis-port
+        - name: SPRING_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-redis-credentials
+              key: password
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: logforwarder-config
+              key: kafka-bootstrap-servers
+        - name: APP_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: logforwarder-app-secrets
+              key: jwt-secret
+        - name: APP_JWT_EXPIRATION
+          value: "86400000"
+        - name: APP_WEBSOCKET_ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: logforwarder-config
+              key: websocket-origins
+        - name: LOGGING_LEVEL_ROOT
+          value: "INFO"
+        - name: LOGGING_LEVEL_COM_MONITORING
+          value: "DEBUG"
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health/startup
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      volumes:
+      - name: config
+        configMap:
+          name: logforwarder-config
+      - name: logs
+        emptyDir: {}
+      nodeSelector:
+        node-type: app
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - logforwarder-middleware
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 30
