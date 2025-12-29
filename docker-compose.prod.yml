@@ -1,0 +1,244 @@
+version: '3.9'
+
+services:
+  # Core Infrastructure Services (Production Configuration)
+  
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: logforwarder-clickhouse
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-logforwarder}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-logforwarder}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      TZ: UTC
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+      - "9004:9004"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./middleware/docker/clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml
+      - ./middleware/docker/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./middleware/docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: logforwarder-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - logger.level=warn
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./middleware/docker/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} http://localhost:9200 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: logforwarder-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  tabix:
+    image: spoonest/clickhouse-tabix-web-client:stable
+    container_name: logforwarder-tabix
+    ports:
+      - "8124:80"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile
+    container_name: logforwarder-middleware
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB:-logforwarder}
+      SPRING_DATASOURCE_USERNAME: ${CLICKHOUSE_USER:-logforwarder}
+      SPRING_DATASOURCE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
+      SPRING_ELASTICSEARCH_REST_USERNAME: elastic
+      SPRING_ELASTICSEARCH_REST_PASSWORD: ${ELASTIC_PASSWORD}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      APP_WEBSOCKET_ALLOWED_ORIGINS: ${WEBSOCKET_ORIGINS}
+      LOG_LEVEL: warn
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2G
+        reservations:
+          cpus: '2'
+          memory: 1G
+
+  logforwarder:
+    build:
+      context: .
+      dockerfile: Dockerfile.logforwarder
+    container_name: logforwarder-forwarder
+    environment:
+      RUST_LOG: warn
+      LOGFORWARDER_ID: ${LOGFORWARDER_ID:-prod-forwarder}
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./LogForwarder/config:/app/config:ro
+      - ./LogForwarder/var:/app/var
+    depends_on:
+      middleware:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: logforwarder-ui
+    environment:
+      VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "3000:3000"
+    depends_on:
+      middleware:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - logforwarder-network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  elasticsearch_data:
+  redis_data:
+
+networks:
+  logforwarder-network:
+    driver: bridge

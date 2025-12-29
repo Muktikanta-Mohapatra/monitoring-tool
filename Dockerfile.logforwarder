@@ -1,0 +1,45 @@
+# Stage 1: Builder
+FROM rust:latest as builder
+
+WORKDIR /build
+
+COPY LogForwarder/Cargo.toml LogForwarder/Cargo.lock ./
+
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+RUN cargo fetch
+
+COPY LogForwarder/src ./src
+COPY LogForwarder/build.rs .
+COPY LogForwarder/proto ./proto
+
+RUN cargo build --release \
+    --jobs=$(nproc) \
+    && strip target/release/high-perf-forwarder
+
+# Stage 2: Runtime
+FROM debian:testing-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/high-perf-forwarder /app/logforwarder
+COPY LogForwarder/config /app/config
+
+RUN chmod +x /app/logforwarder && \
+    mkdir -p /app/var/checkpoint /app/var/config_history
+
+ENV PATH="/app:${PATH}"
+ENV RUST_LOG=info
+
+EXPOSE 9090
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:9090/metrics || exit 1
+
+ENTRYPOINT ["/app/logforwarder"]
+CMD ["--config", "/app/config/inputs.yaml"]
