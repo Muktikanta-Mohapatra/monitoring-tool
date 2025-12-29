@@ -1,0 +1,68 @@
+[package]
+name = "high-perf-forwarder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+arc-swap = "1.6"
+parking_lot = "0.12"
+crossbeam = "0.8"
+crossbeam-queue = "0.3"
+num_cpus = "1.16"
+bytes = "1.5"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+memmap2 = "0.9"
+regex = "1.10"
+parking_lot_core = "0.9"
+reqwest = { version = "0.11", features = ["json"] }
+zstd = "0.13"
+chrono = { version = "0.4", features = ["serde"] }
+
+tonic = "0.11"
+prost = "0.12"
+prost-types = "0.12"
+
+rustls = { version = "0.22", features = ["ring"] }
+rustls-native-certs = "0.7"
+rustls-pemfile = "2.0"
+tokio-rustls = "0.25"
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+
+uuid = { version = "1.6", features = ["v4", "serde"] }
+rand = "0.8"
+dashmap = "5.5"
+async-trait = "0.1"
+tower = "0.4"
+notify = "6.1"
+tempfile = "3.8"
+ctrlc = "3.4"
+prometheus = "0.13"
+hdrhistogram = "7.5"
+sysinfo = "0.30"
+lru = "0.12"
+dotenvy = "0.15"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3.8"
+mockito = "1.2"
+tokio-test = "0.4"
+proptest = "1.4"
+serial_test = "3.0"
+httpmock = "0.6"
+
+
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

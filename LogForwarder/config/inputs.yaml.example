@@ -1,0 +1,93 @@
+system:
+  metrics:
+    bind_address: "127.0.0.1"
+    port: 9090
+    enabled: true
+
+  queue:
+    capacity: 65536
+    max_memory_mb: 50
+
+  batch:
+    size: 1000
+    max_memory_mb: 10
+    flush_interval_ms: 1000
+
+  file_watcher:
+    delay_ms: 500
+    enabled: true
+
+  health_check:
+    interval_secs: 30
+    error_threshold: 10
+
+  file_input:
+    paused_sleep_ms: 500
+    throttled_sleep_ms: 500
+    normal_sleep_ms: 100
+
+  config_history_path: "var/config_history"
+  event_tx_channel_capacity: 10000
+  queue_pop_sleep_ms: 10
+
+inputs:
+  - name: apache_access_logs
+    path: /var/log/apache2/*.log
+    sourcetype: apache_access
+    index: web_logs
+    recursive: false
+    follow_tail: false
+    encoding: utf-8
+    batch_size: 1000
+    read_buffer_kb: 256
+    checkpoint_interval_ms: 5000
+    exclude:
+      - "*.gz"
+      - "*.zip"
+
+  - name: application_json_logs
+    path: /var/log/app/**/*.log
+    sourcetype: json
+    index: app_logs
+    recursive: true
+    follow_tail: false
+    encoding: utf-8
+    batch_size: 500
+    read_buffer_kb: 128
+    checkpoint_interval_ms: 5000
+
+  - name: system_syslog
+    path: /var/log/syslog
+    sourcetype: syslog
+    index: main
+    recursive: false
+    follow_tail: true
+    encoding: utf-8
+    batch_size: 2000
+    read_buffer_kb: 512
+    checkpoint_interval_ms: 10000
+
+outputs:
+  - name: splunk_hec_prod
+    url: https://splunk.example.com:8088/services/collector
+    token: "YOUR_HEC_TOKEN_HERE"
+    tls_verify: true
+    batch_size: 100
+    flush_interval_ms: 1000
+    retry_count: 3
+    compression_enabled: true
+    compression_level: 3
+    compression_adaptive: true
+    compression_use_dict: true
+
+  - name: splunk_hec_backup
+    url: https://splunk-backup.example.com:8088/services/collector
+    token: "YOUR_HEC_TOKEN_BACKUP"
+    tls_verify: true
+    batch_size: 100
+    flush_interval_ms: 1000
+    retry_count: 3
+    compression_enabled: true
+    compression_level: 3
+    compression_adaptive: true
+    compression_use_dict: true

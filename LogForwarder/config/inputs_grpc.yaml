@@ -1,0 +1,65 @@
+system:
+  metrics:
+    bind_address: "0.0.0.0"
+    port: 9090
+    enabled: true
+
+  queue:
+    capacity: 65536
+    max_memory_mb: 50
+
+  batch:
+    size: 1000
+    max_memory_mb: 10
+    flush_interval_ms: 1000
+
+  file_watcher:
+    delay_ms: 500
+    enabled: true
+
+  health_check:
+    interval_secs: 30
+    error_threshold: 10
+
+  file_input:
+    paused_sleep_ms: 500
+    throttled_sleep_ms: 500
+    normal_sleep_ms: 100
+
+  config_history_path: "var/config_history"
+  event_tx_channel_capacity: 10000
+  queue_pop_sleep_ms: 10
+
+inputs:
+  - name: test_logs
+    path: "./test/logs/*.log"
+    sourcetype: test
+    index: main
+    recursive: false
+    follow_tail: false
+    encoding: utf-8
+    batch_size: 100
+    read_buffer_kb: 128
+    checkpoint_interval_ms: 5000
+
+outputs:
+  - name: grpc_output
+    url: "grpc://localhost:50051"
+    token: "test_token"
+    api_key: ""
+    forwarder_id: "grpc-forwarder-001"
+    tls_verify: false
+    batch_size: 50
+    flush_interval_ms: 1000
+    retry_count: 1
+    compression_enabled: false
+    compression_level: 3
+    compression_adaptive: true
+    compression_use_dict: false
+    protocol: "grpc"
+
+indexers:
+  - id: indexer1
+    host: localhost
+    port: 50051
+    weight: 100

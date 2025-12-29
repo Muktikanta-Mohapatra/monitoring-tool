@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package forwarder.v1;
+
+option go_package = "github.com/forwarder/v1";
+option java_multiple_files = true;
+option java_package = "com.forwarder.v1";
+
+message Event {
+  bytes raw_data = 1;
+  Metadata metadata = 2;
+  int64 timestamp_nanos = 3;
+  uint64 offset = 4;
+  string source_id = 5;
+  string severity = 6;
+  string forwarder_id = 7;
+  string source_name = 8;
+  map<string, string> parsed_fields = 9;
+  map<string, string> enriched_fields = 10;
+}
+
+message Metadata {
+  string source = 1;
+  string sourcetype = 2;
+  string host = 3;
+  string index = 4;
+  map<string, string> tags = 5;
+}
+
+enum CompressionType {
+  NONE = 0;
+  ZSTD = 1;
+  LZ4 = 2;
+}
+
+message EventBatch {
+  repeated Event events = 1;
+  CompressionType compression = 2;
+  bytes compressed_data = 3;
+  uint32 uncompressed_size = 4;
+  uint32 checksum = 5;
+  uint64 batch_id = 6;
+}
+
+message AckResponse {
+  uint64 batch_id = 1;
+  bool success = 2;
+  uint32 events_received = 3;
+  string error_message = 4;
+  int64 timestamp_nanos = 5;
+}
+
+message HealthCheckRequest {
+  string forwarder_id = 1;
+}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  double cpu_usage = 2;
+  double memory_usage_mb = 3;
+  uint64 queue_depth = 4;
+}
+
+message CapacityRequest {
+  string forwarder_id = 1;
+}
+
+message CapacityResponse {
+  uint64 available_capacity_bytes = 1;
+  uint32 max_events_per_second = 2;
+  bool accepting_connections = 3;
+}
+
+service ForwarderService {
+  rpc SendEvents(stream EventBatch) returns (stream AckResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc GetCapacity(CapacityRequest) returns (CapacityResponse);
+}

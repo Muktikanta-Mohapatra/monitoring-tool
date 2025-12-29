@@ -1,0 +1,10 @@
+# Add these lines to your .gitignore file
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Sensitive configuration
+config/*.local.yaml
+config/*secret*.yaml
