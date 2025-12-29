@@ -1,0 +1,497 @@
+# ==============================================================================
+# LOGFORWARDER - PRODUCTION DOCKER COMPOSE
+# ==============================================================================
+# Production-ready configuration with security hardening and resource limits.
+#
+# Usage:
+#   Start services:         docker-compose -f docker-compose.prod.yml up -d
+#   View logs:              docker-compose -f docker-compose.prod.yml logs -f
+#   Stop services:          docker-compose -f docker-compose.prod.yml down
+#
+# IMPORTANT: Before running in production:
+#   1. Copy .env.example to .env and set all passwords to strong values
+#   2. Review and adjust resource limits based on your infrastructure
+#   3. Configure proper SSL/TLS termination (nginx, traefik, etc.)
+#   4. Set up proper backup procedures for volumes
+#   5. Configure monitoring and alerting
+#
+# Security Features Enabled:
+#   - Password authentication for all services
+#   - Resource limits to prevent runaway processes
+#   - Health checks for all services
+#   - Restart policies for high availability
+#   - Internal network isolation
+# ==============================================================================
+
+# ==============================================================================
+# SERVICE DEFINITIONS
+# ==============================================================================
+services:
+
+  # ============================================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # CLICKHOUSE - Time-Series Database (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Required password authentication
+  #   - Resource limits (2 CPU, 4GB memory)
+  #   - Backup volume for data recovery
+  #   - Always restart policy
+  # ----------------------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: logforwarder-clickhouse-prod
+    environment:
+      # Required environment variables (no defaults in production)
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      TZ: UTC
+    volumes:
+      # Persistent storage
+      - clickhouse_data_prod:/var/lib/clickhouse
+      - clickhouse_logs_prod:/var/log/clickhouse-server
+      # Backup volume
+      - clickhouse_backup:/var/backups
+      # Configuration (read-only)
+      - ./configs/clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+      - ./configs/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+      - ./configs/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    # Resource limits for production stability
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # ----------------------------------------------------------------------------
+  # ELASTICSEARCH - Full-Text Search (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Security enabled with authentication
+  #   - Increased JVM heap (1GB)
+  #   - Resource limits (2 CPU, 2GB memory)
+  #   - Warning-level logging
+  # ----------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: logforwarder-elasticsearch-prod
+    environment:
+      - discovery.type=single-node
+      # Increased heap for production workloads
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      # Security enabled in production
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      # Reduced logging in production
+      - logger.level=warn
+    volumes:
+      - elasticsearch_data_prod:/usr/share/elasticsearch/data
+      - ./configs/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} http://localhost:9200 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ----------------------------------------------------------------------------
+  # REDIS - Caching (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Password authentication required
+  #   - Memory limit with LRU eviction
+  #   - Resource limits (1 CPU, 512MB memory)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: logforwarder-redis-prod
+    # Require password and set memory limit with eviction policy
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 1gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ----------------------------------------------------------------------------
+  # POSTGRESQL - Transactional Database (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Required password authentication
+  #   - Backup volume
+  #   - Resource limits (2 CPU, 1GB memory)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: logforwarder-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRESQL_DB}
+      POSTGRES_USER: ${POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
+      TZ: UTC
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - postgres_backup_prod:/var/backups
+      - ./configs/postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRESQL_USER} -d ${POSTGRESQL_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # ZOOKEEPER - Kafka Coordination (Production)
+  # ----------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: logforwarder-zookeeper-prod
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data_prod:/var/lib/zookeeper/data
+      - zookeeper_logs_prod:/var/lib/zookeeper/log
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ----------------------------------------------------------------------------
+  # KAFKA - Message Queue (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Persistent data storage
+  #   - Resource limits (2 CPU, 2GB memory)
+  #   - Internal network only (no external ports)
+  # ----------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: logforwarder-kafka-prod
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Internal listener only in production
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Production tuning
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka_data_prod:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ----------------------------------------------------------------------------
+  # TABIX - ClickHouse Web UI (Production)
+  # ----------------------------------------------------------------------------
+  # Note: Consider disabling or restricting access in production
+  # Use a reverse proxy with authentication for secure access
+  # ----------------------------------------------------------------------------
+  tabix:
+    image: spoonest/clickhouse-tabix-web-client:stable
+    container_name: logforwarder-tabix-prod
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ============================================================================
+  # APPLICATION SERVICES
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # MIDDLEWARE - Spring Boot REST API (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Production Spring profile
+  #   - Warning-level logging
+  #   - Security settings for JWT
+  #   - Resource limits (4 CPU, 2GB memory)
+  # ----------------------------------------------------------------------------
+  middleware:
+    build:
+      context: ../middleware
+      dockerfile: ../docker/Dockerfile.middleware
+    container_name: logforwarder-middleware-prod
+    environment:
+      # Production profile
+      SPRING_PROFILES_ACTIVE: prod
+      # Database connections
+      DATABASE_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB}
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      POSTGRESQL_URL: jdbc:postgresql://postgres:5432/${POSTGRESQL_DB}
+      POSTGRESQL_USER: ${POSTGRESQL_USER}
+      POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
+      # Elasticsearch with authentication
+      SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
+      SPRING_ELASTICSEARCH_REST_USERNAME: elastic
+      SPRING_ELASTICSEARCH_REST_PASSWORD: ${ELASTIC_PASSWORD}
+      # Redis with authentication
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # JWT security (MUST be set in production)
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      # WebSocket origins (set to your domain)
+      APP_WEBSOCKET_ALLOWED_ORIGINS: ${WEBSOCKET_ORIGINS}
+      # Production logging
+      LOGGING_LEVEL_ROOT: WARN
+      LOGGING_LEVEL_COM_LOGFORWARDER: INFO
+      # Security settings
+      MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
+      LOCKOUT_DURATION_MINUTES: ${LOCKOUT_DURATION_MINUTES:-15}
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-1000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2G
+        reservations:
+          cpus: '2'
+          memory: 1G
+
+  # ----------------------------------------------------------------------------
+  # LOGFORWARDER - Rust Agent (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration with:
+  #   - Warning-level logging
+  #   - Read-only configuration mount
+  #   - Resource limits (2 CPU, 1GB memory)
+  # ----------------------------------------------------------------------------
+  logforwarder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.logforwarder
+    container_name: logforwarder-agent-prod
+    environment:
+      RUST_LOG: warn
+      LOGFORWARDER_ID: ${LOGFORWARDER_ID:-prod-forwarder}
+    volumes:
+      # Configuration (read-only in production)
+      - ../LogForwarder/config:/app/config:ro
+      # Runtime data
+      - logforwarder_var_prod:/app/var
+    depends_on:
+      middleware:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+  # ----------------------------------------------------------------------------
+  # UI - React Frontend (Production)
+  # ----------------------------------------------------------------------------
+  # Production configuration:
+  #   - Pre-built static files served by 'serve'
+  #   - Resource limits (1 CPU, 256MB memory)
+  # ----------------------------------------------------------------------------
+  ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ui
+    container_name: logforwarder-ui-prod
+    environment:
+      # API URL for production (typically same domain via reverse proxy)
+      VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "3000:3000"
+    depends_on:
+      middleware:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - logforwarder-network-prod
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+# Production volumes with descriptive names for easy management
+# ==============================================================================
+volumes:
+  # ClickHouse
+  clickhouse_data_prod:
+    name: logforwarder_prod_clickhouse_data
+  clickhouse_logs_prod:
+    name: logforwarder_prod_clickhouse_logs
+  clickhouse_backup:
+    name: logforwarder_prod_clickhouse_backup
+  # Elasticsearch
+  elasticsearch_data_prod:
+    name: logforwarder_prod_elasticsearch_data
+  # Redis
+  redis_data_prod:
+    name: logforwarder_prod_redis_data
+  # PostgreSQL
+  postgres_data_prod:
+    name: logforwarder_prod_postgres_data
+  postgres_backup_prod:
+    name: logforwarder_prod_postgres_backup
+  # Kafka & Zookeeper
+  kafka_data_prod:
+    name: logforwarder_prod_kafka_data
+  zookeeper_data_prod:
+    name: logforwarder_prod_zookeeper_data
+  zookeeper_logs_prod:
+    name: logforwarder_prod_zookeeper_logs
+  # LogForwarder
+  logforwarder_var_prod:
+    name: logforwarder_prod_agent_var
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+# Isolated production network
+# ==============================================================================
+networks:
+  logforwarder-network-prod:
+    name: logforwarder-network-prod
+    driver: bridge

@@ -1,0 +1,141 @@
+# ==============================================================================
+# LOGFORWARDER AGENT DOCKERFILE
+# ==============================================================================
+# Multi-stage build for the high-performance Rust log forwarder agent.
+#
+# Build stages:
+# 1. Builder: Compiles the Rust application with optimizations
+# 2. Runtime: Minimal Debian image with only runtime dependencies
+#
+# Build command:
+#   docker build -f docker/Dockerfile.logforwarder -t logforwarder-agent .
+#
+# Or using docker-compose:
+#   docker-compose -f docker/docker-compose.yml build logforwarder
+# ==============================================================================
+
+# ==============================================================================
+# STAGE 1: BUILDER
+# ==============================================================================
+# Uses the official Rust image to compile the application.
+# Includes dependency caching for faster rebuilds.
+# ==============================================================================
+FROM rust:bookworm as builder
+
+# Set working directory for the build
+WORKDIR /build
+
+# ------------------------------------------------------------------------------
+# DEPENDENCY CACHING LAYER
+# ------------------------------------------------------------------------------
+# Copy Cargo.toml and Cargo.lock first to cache dependency compilation.
+# Create a dummy main.rs to allow cargo to compile dependencies.
+# This layer only rebuilds when dependencies change.
+# ------------------------------------------------------------------------------
+COPY LogForwarder/Cargo.toml LogForwarder/Cargo.lock ./
+
+# Create dummy source to compile dependencies
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Fetch and compile dependencies (cached layer)
+RUN cargo fetch
+
+# ------------------------------------------------------------------------------
+# SOURCE CODE COMPILATION
+# ------------------------------------------------------------------------------
+# Copy actual source code and build the release binary.
+# Uses all available CPU cores for parallel compilation.
+# Strip debug symbols to reduce binary size.
+# ------------------------------------------------------------------------------
+COPY LogForwarder/src ./src
+COPY LogForwarder/build.rs .
+COPY LogForwarder/proto ./proto
+
+# Build release binary with maximum optimizations
+# --jobs=$(nproc): Use all available CPU cores
+RUN cargo build --release \
+    --jobs=$(nproc) \
+    && strip target/release/high-perf-forwarder
+
+# ==============================================================================
+# STAGE 2: RUNTIME
+# ==============================================================================
+# Uses minimal Debian slim image for runtime.
+# Only includes the compiled binary and necessary runtime libraries.
+# ==============================================================================
+FROM debian:bookworm-slim
+
+# Add labels for container identification
+LABEL maintainer="LogForwarder Team"
+LABEL description="LogForwarder Agent - High-performance log collection and forwarding"
+LABEL version="1.0.0"
+
+# ------------------------------------------------------------------------------
+# INSTALL RUNTIME DEPENDENCIES
+# ------------------------------------------------------------------------------
+# - ca-certificates: Required for HTTPS connections
+# - curl: Required for health checks
+# - Clean up apt cache to reduce image size
+# ------------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# ------------------------------------------------------------------------------
+# COPY APPLICATION FILES
+# ------------------------------------------------------------------------------
+# Copy the compiled binary from the builder stage
+# Copy default configuration files
+# ------------------------------------------------------------------------------
+COPY --from=builder /build/target/release/high-perf-forwarder /app/logforwarder
+COPY LogForwarder/config /app/config
+
+# ------------------------------------------------------------------------------
+# CREATE RUNTIME DIRECTORIES
+# ------------------------------------------------------------------------------
+# - /app/var/checkpoint: Stores checkpoint files for resume capability
+# - /app/var/config_history: Stores configuration history
+# ------------------------------------------------------------------------------
+RUN chmod +x /app/logforwarder && \
+    mkdir -p /app/var/checkpoint /app/var/config_history
+
+# ------------------------------------------------------------------------------
+# ENVIRONMENT CONFIGURATION
+# ------------------------------------------------------------------------------
+# Add /app to PATH for easy command access
+# Set default log level (can be overridden at runtime)
+# ------------------------------------------------------------------------------
+ENV PATH="/app:${PATH}"
+ENV RUST_LOG=info
+
+# ------------------------------------------------------------------------------
+# EXPOSE PORTS
+# ------------------------------------------------------------------------------
+# Port 9090: Metrics endpoint (Prometheus format)
+# ------------------------------------------------------------------------------
+EXPOSE 9090
+
+# ------------------------------------------------------------------------------
+# HEALTH CHECK
+# ------------------------------------------------------------------------------
+# Check the metrics endpoint to verify the service is running.
+# The agent exposes Prometheus metrics at /metrics.
+# ------------------------------------------------------------------------------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:9090/metrics || exit 1
+
+# ------------------------------------------------------------------------------
+# ENTRYPOINT AND DEFAULT COMMAND
+# ------------------------------------------------------------------------------
+# ENTRYPOINT: The binary to execute
+# CMD: Default arguments (configuration file path)
+#
+# Override CMD to use a different config:
+#   docker run logforwarder-agent --config /app/config/custom.yaml
+# ------------------------------------------------------------------------------
+ENTRYPOINT ["/app/logforwarder"]
+CMD ["--config", "/app/config/inputs.yaml"]

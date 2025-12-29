@@ -1,0 +1,113 @@
+# ==============================================================================
+# LOGFORWARDER MIDDLEWARE DOCKERFILE
+# ==============================================================================
+# Multi-stage build for the Spring Boot middleware service.
+#
+# Build stages:
+# 1. Builder: Compiles the application using Maven
+# 2. Runtime: Minimal JRE image for production deployment
+#
+# Build command:
+#   docker build -f docker/Dockerfile.middleware -t logforwarder-middleware ../middleware
+#
+# Or using docker-compose:
+#   docker-compose -f docker/docker-compose.yml build middleware
+# ==============================================================================
+
+# ==============================================================================
+# STAGE 1: BUILDER
+# ==============================================================================
+# Uses Maven with Eclipse Temurin JDK 21 to compile the application.
+# Dependencies are downloaded first to leverage Docker layer caching.
+# ==============================================================================
+FROM maven:3.9.4-eclipse-temurin-21 AS builder
+
+# Set working directory for the build
+WORKDIR /build
+
+# ------------------------------------------------------------------------------
+# DEPENDENCY CACHING LAYER
+# ------------------------------------------------------------------------------
+# Copy only pom.xml first and download dependencies.
+# This layer is cached and only rebuilt when pom.xml changes.
+# ------------------------------------------------------------------------------
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# ------------------------------------------------------------------------------
+# SOURCE CODE COMPILATION
+# ------------------------------------------------------------------------------
+# Copy source code and build the application.
+# Skip tests during Docker build (run tests in CI/CD pipeline).
+# ------------------------------------------------------------------------------
+COPY src ./src
+RUN mvn clean package -DskipTests -B
+
+# ==============================================================================
+# STAGE 2: RUNTIME
+# ==============================================================================
+# Uses minimal Alpine-based JRE image for smaller footprint.
+# Only includes the compiled JAR and runtime dependencies.
+# ==============================================================================
+FROM eclipse-temurin:21-jre-alpine
+
+# Add labels for container identification
+LABEL maintainer="LogForwarder Team"
+LABEL description="LogForwarder Middleware Service - Spring Boot REST API"
+LABEL version="1.0.0"
+
+# Set working directory
+WORKDIR /app
+
+# ------------------------------------------------------------------------------
+# INSTALL RUNTIME DEPENDENCIES
+# ------------------------------------------------------------------------------
+# Install curl for health checks
+# ------------------------------------------------------------------------------
+RUN apk add --no-cache curl
+
+# ------------------------------------------------------------------------------
+# COPY APPLICATION ARTIFACT
+# ------------------------------------------------------------------------------
+# Copy the compiled JAR from the builder stage
+# ------------------------------------------------------------------------------
+COPY --from=builder /build/target/logforwarder-middleware-1.0.0.jar app.jar
+
+# Ensure the JAR is executable
+RUN chmod +x app.jar
+
+# ------------------------------------------------------------------------------
+# EXPOSE PORTS
+# ------------------------------------------------------------------------------
+# Port 8080: HTTP REST API and WebSocket endpoints
+# ------------------------------------------------------------------------------
+EXPOSE 8080
+
+# ------------------------------------------------------------------------------
+# JAVA MEMORY CONFIGURATION
+# ------------------------------------------------------------------------------
+# Default heap settings - adjust based on available container memory:
+# - Xms: Initial heap size (512MB)
+# - Xmx: Maximum heap size (2GB)
+#
+# For containers with different memory limits, override JAVA_OPTS:
+#   docker run -e JAVA_OPTS="-Xms1g -Xmx4g" ...
+# ------------------------------------------------------------------------------
+ENV JAVA_OPTS="-Xms512m -Xmx2g"
+
+# ------------------------------------------------------------------------------
+# HEALTH CHECK
+# ------------------------------------------------------------------------------
+# Check the Spring Boot Actuator health endpoint.
+# Adjust start_period based on application startup time.
+# ------------------------------------------------------------------------------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/api/actuator/health || exit 1
+
+# ------------------------------------------------------------------------------
+# ENTRYPOINT
+# ------------------------------------------------------------------------------
+# Use shell form to allow JAVA_OPTS environment variable expansion.
+# The 'exec' command ensures proper signal handling for graceful shutdown.
+# ------------------------------------------------------------------------------
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

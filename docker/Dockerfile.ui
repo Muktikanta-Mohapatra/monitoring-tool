@@ -1,0 +1,111 @@
+# ==============================================================================
+# LOGFORWARDER UI DOCKERFILE
+# ==============================================================================
+# Multi-stage build for the React/Vite frontend application.
+#
+# Build stages:
+# 1. Builder: Installs dependencies and builds the production bundle
+# 2. Runtime: Serves the static files using 'serve'
+#
+# Build command:
+#   docker build -f docker/Dockerfile.ui -t logforwarder-ui .
+#
+# Or using docker-compose:
+#   docker-compose -f docker/docker-compose.yml build ui
+# ==============================================================================
+
+# ==============================================================================
+# STAGE 1: BUILDER
+# ==============================================================================
+# Uses Node.js Alpine image to build the frontend application.
+# Installs dependencies and creates an optimized production build.
+# ==============================================================================
+FROM node:22-alpine as builder
+
+# Set working directory for the build
+WORKDIR /app
+
+# ------------------------------------------------------------------------------
+# DEPENDENCY CACHING LAYER
+# ------------------------------------------------------------------------------
+# Copy only package files first to cache npm install.
+# This layer only rebuilds when dependencies change.
+# Using npm ci for deterministic, faster installs.
+# ------------------------------------------------------------------------------
+COPY ui/package.json ui/package-lock.json ./
+
+# Install dependencies with clean install (faster, deterministic)
+RUN npm ci
+
+# ------------------------------------------------------------------------------
+# APPLICATION BUILD
+# ------------------------------------------------------------------------------
+# Copy source code and configuration files.
+# Build the production bundle with Vite.
+# ------------------------------------------------------------------------------
+COPY ui/src ./src
+COPY ui/public ./public
+COPY ui/index.html ui/tsconfig.json ui/tsconfig.app.json ui/tsconfig.node.json ui/vite.config.ts ./
+COPY ui/eslint.config.js ./
+
+# Build production bundle
+# Vite outputs to /app/dist by default
+RUN npm run build
+
+# ==============================================================================
+# STAGE 2: RUNTIME
+# ==============================================================================
+# Uses minimal Node.js Alpine image to serve static files.
+# The 'serve' package is a lightweight static file server.
+# ==============================================================================
+FROM node:22-alpine
+
+# Add labels for container identification
+LABEL maintainer="LogForwarder Team"
+LABEL description="LogForwarder UI - React/Vite Frontend Application"
+LABEL version="1.0.0"
+
+# Set working directory
+WORKDIR /app
+
+# ------------------------------------------------------------------------------
+# INSTALL STATIC FILE SERVER
+# ------------------------------------------------------------------------------
+# 'serve' is a lightweight static file server ideal for SPAs.
+# It handles client-side routing and gzip compression.
+# ------------------------------------------------------------------------------
+RUN npm install -g serve
+
+# ------------------------------------------------------------------------------
+# COPY BUILD ARTIFACTS
+# ------------------------------------------------------------------------------
+# Copy only the production build output from the builder stage.
+# No source code or node_modules needed in runtime image.
+# ------------------------------------------------------------------------------
+COPY --from=builder /app/dist ./dist
+
+# ------------------------------------------------------------------------------
+# EXPOSE PORTS
+# ------------------------------------------------------------------------------
+# Port 3000: HTTP server for the frontend application
+# ------------------------------------------------------------------------------
+EXPOSE 3000
+
+# ------------------------------------------------------------------------------
+# HEALTH CHECK
+# ------------------------------------------------------------------------------
+# Check if the server is responding to requests.
+# Uses wget as it's available in Alpine by default.
+# ------------------------------------------------------------------------------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+
+# ------------------------------------------------------------------------------
+# RUNTIME COMMAND
+# ------------------------------------------------------------------------------
+# Start the static file server:
+# - -s: Enable single-page application mode (rewrites to index.html)
+# - dist: Directory to serve
+# - -l 3000: Listen on port 3000
+# ------------------------------------------------------------------------------
+CMD ["serve", "-s", "dist", "-l", "3000"]

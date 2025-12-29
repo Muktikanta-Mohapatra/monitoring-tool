@@ -1,0 +1,470 @@
+# ==============================================================================
+# LOGFORWARDER - DEVELOPMENT DOCKER COMPOSE
+# ==============================================================================
+# This file defines all services required to run LogForwarder in development mode.
+#
+# Usage:
+#   Start all services:     docker-compose up -d
+#   Start specific service: docker-compose up -d middleware
+#   View logs:              docker-compose logs -f [service]
+#   Stop all services:      docker-compose down
+#   Remove volumes:         docker-compose down -v
+#
+# Services included:
+#   Infrastructure:
+#   - ClickHouse:     Time-series database for log storage (port 8123, 9000)
+#   - Elasticsearch:  Full-text search engine (port 9200)
+#   - Redis:          Caching and session storage (port 6379)
+#   - PostgreSQL:     Transactional database (port 5432)
+#   - Zookeeper:      Kafka coordination (port 2181)
+#   - Kafka:          Message queue for log streaming (port 9092)
+#   - Tabix:          ClickHouse web UI (port 8124)
+#
+#   Application:
+#   - Middleware:     Spring Boot REST API (port 8080)
+#   - LogForwarder:   Rust log collection agent (port 9090)
+#   - UI:             React/Vite frontend (port 3000)
+#
+# Environment variables are loaded from .env file in the same directory.
+# Copy .env.example to .env and customize as needed.
+# ==============================================================================
+
+# ==============================================================================
+# SERVICE DEFINITIONS
+# ==============================================================================
+services:
+
+  # ============================================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================================
+  # These services provide the foundational infrastructure for LogForwarder.
+  # They should be started first and must be healthy before application services.
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # CLICKHOUSE - Time-Series Database
+  # ----------------------------------------------------------------------------
+  # Primary storage for log events and metrics.
+  # Optimized for high-volume writes and analytical queries.
+  #
+  # Ports:
+  #   - 8123: HTTP interface (REST API, web UI)
+  #   - 9000: Native TCP protocol (high-performance clients)
+  #   - 9004: MySQL wire protocol (compatibility)
+  #
+  # Web UI: http://localhost:8123/play
+  # ----------------------------------------------------------------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: logforwarder-clickhouse
+    environment:
+      # Database and user configuration
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-logforwarder}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-logforwarder}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-logforwarder}
+      # Enable access management for creating users via SQL
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      # Use UTC for consistent timestamps
+      TZ: UTC
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native TCP
+      - "9004:9004"   # MySQL protocol
+    volumes:
+      # Persistent data storage
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      # Configuration files (mounted from configs directory)
+      - ./configs/clickhouse/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
+      - ./configs/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+      - ./configs/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - logforwarder-network
+    # Increase file descriptor limits for high-volume workloads
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ELASTICSEARCH - Full-Text Search Engine
+  # ----------------------------------------------------------------------------
+  # Provides full-text search capabilities for log events.
+  # Indexed fields from ClickHouse are synced to Elasticsearch.
+  #
+  # Port 9200: REST API
+  # Port 9300: Inter-node communication (cluster mode)
+  #
+  # API: http://localhost:9200
+  # ----------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: logforwarder-elasticsearch
+    environment:
+      # Single-node mode (no cluster coordination needed)
+      - discovery.type=single-node
+      # JVM heap size (adjust based on available memory)
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Disable security for development (enable in production!)
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      # Default password (used if security is enabled)
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-elastic_password}
+      # Logging level
+      - logger.level=info
+    ports:
+      - "9200:9200"   # REST API
+      - "9300:9300"   # Inter-node
+    volumes:
+      # Persistent data storage
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      # Custom configuration
+      - ./configs/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # REDIS - Caching and Session Storage
+  # ----------------------------------------------------------------------------
+  # Used for caching, session storage, and rate limiting.
+  # Provides fast in-memory data access.
+  #
+  # Port 6379: Redis protocol
+  #
+  # CLI: docker exec -it logforwarder-redis redis-cli
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: logforwarder-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      # Persistent data storage (RDB snapshots)
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # POSTGRESQL - Transactional Database
+  # ----------------------------------------------------------------------------
+  # Stores configuration data requiring ACID compliance.
+  # Used alongside ClickHouse for transactional operations.
+  #
+  # Port 5432: PostgreSQL protocol
+  #
+  # CLI: docker exec -it logforwarder-postgres psql -U logforwarder
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: logforwarder-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRESQL_DB:-logforwarder}
+      POSTGRES_USER: ${POSTGRESQL_USER:-logforwarder}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD:-logforwarder_password}
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent data storage
+      - postgres_data:/var/lib/postgresql/data
+      # Initialization script
+      - ./configs/postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRESQL_USER:-logforwarder} -d ${POSTGRESQL_DB:-logforwarder}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ZOOKEEPER - Kafka Coordination
+  # ----------------------------------------------------------------------------
+  # Required by Kafka for cluster coordination and configuration.
+  #
+  # Port 2181: Client connections
+  # ----------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: logforwarder-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # KAFKA - Message Queue
+  # ----------------------------------------------------------------------------
+  # Message broker for log streaming between forwarders and middleware.
+  # Provides high-throughput, fault-tolerant message delivery.
+  #
+  # Port 9092: External clients (host machine)
+  # Port 29092: Internal clients (Docker network)
+  # ----------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: logforwarder-kafka
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"    # External access
+      - "29092:29092"  # Internal access
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Listener configuration for both internal and external access
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Replication settings (single broker)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Auto-create topics when producers connect
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # TABIX - ClickHouse Web UI
+  # ----------------------------------------------------------------------------
+  # Web-based UI for ClickHouse database management.
+  # Provides query editor, schema browser, and visualization.
+  #
+  # Port 8124: Web interface
+  #
+  # Access: http://localhost:8124
+  # Connect to: http://clickhouse:8123
+  # ----------------------------------------------------------------------------
+  tabix:
+    image: spoonest/clickhouse-tabix-web-client:stable
+    container_name: logforwarder-tabix
+    ports:
+      - "8124:80"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # APPLICATION SERVICES
+  # ============================================================================
+  # These services provide the core LogForwarder functionality.
+  # They depend on the infrastructure services above.
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # MIDDLEWARE - Spring Boot REST API
+  # ----------------------------------------------------------------------------
+  # Core backend service providing REST API and WebSocket endpoints.
+  # Handles authentication, log ingestion, search, and alerting.
+  #
+  # Port 8080: HTTP API
+  #
+  # API Docs: http://localhost:8080/swagger-ui.html
+  # Health: http://localhost:8080/api/actuator/health
+  # ----------------------------------------------------------------------------
+  middleware:
+    build:
+      context: ../middleware
+      dockerfile: ../docker/Dockerfile.middleware
+    container_name: logforwarder-middleware
+    environment:
+      # Spring profile (dev, prod, test)
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # ClickHouse connection
+      DATABASE_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB:-logforwarder}
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB:-logforwarder}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-logforwarder}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-logforwarder}
+      # PostgreSQL connection
+      POSTGRESQL_URL: jdbc:postgresql://postgres:5432/${POSTGRESQL_DB:-logforwarder}
+      POSTGRESQL_USER: ${POSTGRESQL_USER:-logforwarder}
+      POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD:-logforwarder_password}
+      # Elasticsearch connection
+      ELASTICSEARCH_URI: http://elasticsearch:9200
+      ELASTICSEARCH_USER: ${ELASTICSEARCH_USER:-elastic}
+      ELASTICSEARCH_PASSWORD: ${ELASTICSEARCH_PASSWORD:-elastic_password}
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_password}
+      # Kafka connection
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # JWT authentication
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-in-production}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      # WebSocket allowed origins
+      APP_WEBSOCKET_ALLOWED_ORIGINS: ${WEBSOCKET_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # LOGFORWARDER - Rust Log Collection Agent
+  # ----------------------------------------------------------------------------
+  # High-performance log collection and forwarding agent.
+  # Collects logs from various sources and sends to middleware.
+  #
+  # Port 9090: Metrics endpoint (Prometheus format)
+  #
+  # Metrics: http://localhost:9090/metrics
+  # ----------------------------------------------------------------------------
+  logforwarder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.logforwarder
+    container_name: logforwarder-agent
+    environment:
+      # Log level (trace, debug, info, warn, error)
+      RUST_LOG: info
+      # Unique identifier for this forwarder instance
+      LOGFORWARDER_ID: ${LOGFORWARDER_ID:-docker-forwarder}
+    ports:
+      - "9090:9090"
+    volumes:
+      # Configuration files (read-only)
+      - ../LogForwarder/config:/app/config:ro
+      # Runtime data (checkpoints, state)
+      - ../LogForwarder/var:/app/var
+      # Test data for development
+      - ../LogForwarder/test:/app/test
+    depends_on:
+      middleware:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # UI - React/Vite Frontend (Development Mode)
+  # ----------------------------------------------------------------------------
+  # Web-based user interface for LogForwarder.
+  # Runs Vite dev server with hot module replacement.
+  #
+  # Port 3000: Development server (mapped from Vite's 5173)
+  #
+  # Access: http://localhost:3000
+  # ----------------------------------------------------------------------------
+  ui:
+    image: node:22-alpine
+    container_name: logforwarder-ui
+    working_dir: /app
+    # Run npm install on startup and start dev server
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      # API endpoint for the frontend
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    ports:
+      - "3000:5173"
+    volumes:
+      # Mount source code for hot reloading
+      - ../ui:/app
+      # Anonymous volume for node_modules (prevents host override)
+      - /app/node_modules
+    depends_on:
+      middleware:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+# Named volumes for persistent data storage.
+# Data persists across container restarts and rebuilds.
+# Use 'docker-compose down -v' to remove volumes and reset data.
+# ==============================================================================
+volumes:
+  # ClickHouse data and logs
+  clickhouse_data:
+    name: logforwarder_clickhouse_data
+  clickhouse_logs:
+    name: logforwarder_clickhouse_logs
+  # Elasticsearch indices
+  elasticsearch_data:
+    name: logforwarder_elasticsearch_data
+  # Redis persistence
+  redis_data:
+    name: logforwarder_redis_data
+  # PostgreSQL data
+  postgres_data:
+    name: logforwarder_postgres_data
+  # Kafka data
+  kafka_data:
+    name: logforwarder_kafka_data
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+# Custom bridge network for service communication.
+# All services can communicate using container names as hostnames.
+# ==============================================================================
+networks:
+  logforwarder-network:
+    name: logforwarder-network
+    driver: bridge

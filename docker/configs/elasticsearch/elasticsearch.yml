@@ -1,0 +1,80 @@
+# ==============================================================================
+# ELASTICSEARCH CONFIGURATION
+# ==============================================================================
+# This configuration file is used by the Elasticsearch service.
+# Mounted to: /usr/share/elasticsearch/config/elasticsearch.yml
+#
+# Key settings:
+# - Single-node discovery for development/small deployments
+# - Security features can be enabled for production
+# - Memory and cache settings optimized for log analysis
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# CLUSTER SETTINGS
+# ------------------------------------------------------------------------------
+# Cluster name - all nodes in a cluster must share this name
+cluster.name: logforwarder-cluster
+
+# Node name - unique identifier for this node
+node.name: elasticsearch-node-1
+
+# ------------------------------------------------------------------------------
+# DISCOVERY SETTINGS
+# ------------------------------------------------------------------------------
+# Single-node mode - no cluster coordination needed
+# For multi-node clusters, use discovery.seed_hosts and cluster.initial_master_nodes
+discovery.type: single-node
+
+# ------------------------------------------------------------------------------
+# NETWORK SETTINGS
+# ------------------------------------------------------------------------------
+# HTTP port for REST API
+http.host: 0.0.0.0
+http.port: 9200
+
+# Network binding - allow connections from any interface
+network.host: 0.0.0.0
+
+# Published host for inter-node communication
+network.publish_host: elasticsearch
+
+# ------------------------------------------------------------------------------
+# MEMORY SETTINGS
+# ------------------------------------------------------------------------------
+# Lock memory to prevent swapping (requires memlock ulimit)
+bootstrap.memory_lock: true
+
+# ------------------------------------------------------------------------------
+# INDEX SETTINGS
+# ------------------------------------------------------------------------------
+# Auto-create system indices for monitoring and alerts
+action.auto_create_index: .watches,.triggered_watches,.watcher-history-*,.logs-generic-default
+
+# Index buffer size as percentage of heap
+indices.memory.index_buffer_size: 40%
+
+# Query cache size as percentage of heap
+indices.queries.cache.size: 25%
+
+# ------------------------------------------------------------------------------
+# LOGGING SETTINGS
+# ------------------------------------------------------------------------------
+# Log level: trace, debug, info, warn, error
+# Use 'warn' in production to reduce log volume
+logger.level: info
+
+# ------------------------------------------------------------------------------
+# X-PACK FEATURES
+# ------------------------------------------------------------------------------
+# Machine learning features
+xpack.ml.enabled: true
+
+# Monitoring templates
+xpack.monitoring.templates.enabled: true
+
+# ------------------------------------------------------------------------------
+# INDEX LIFECYCLE MANAGEMENT
+# ------------------------------------------------------------------------------
+# How often to check for ILM policy transitions
+indices.lifecycle.poll_interval: 10m
