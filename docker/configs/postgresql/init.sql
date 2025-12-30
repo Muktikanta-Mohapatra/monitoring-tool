@@ -20,9 +20,9 @@
 -- - checkpoints: File reading checkpoints
 -- =============================================================================
 
--- Create schema and set search path
-CREATE SCHEMA IF NOT EXISTS logforwarder;
-SET search_path TO logforwarder;
+-- Use the public schema in the logforwarder database
+-- Tables are created in the 'logforwarder' database (set via POSTGRES_DB env var)
+SET search_path TO public;
 
 -- =============================================================================
 -- USERS TABLE
@@ -297,6 +297,6 @@ CREATE INDEX idx_checkpoints_last_update ON checkpoints (last_update DESC);
 -- =============================================================================
 -- Grant all privileges to the logforwarder user
 -- =============================================================================
-GRANT ALL PRIVILEGES ON SCHEMA logforwarder TO logforwarder;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA logforwarder TO logforwarder;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA logforwarder TO logforwarder;
+GRANT ALL PRIVILEGES ON SCHEMA public TO logforwarder;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO logforwarder;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO logforwarder;

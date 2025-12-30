@@ -19,6 +19,7 @@
 #   - Zookeeper:      Kafka coordination (port 2181)
 #   - Kafka:          Message queue for log streaming (port 9092)
 #   - Tabix:          ClickHouse web UI (port 8124)
+#   - Kafka UI:       Kafka management interface (port 8085)
 #
 #   Application:
 #   - Middleware:     Spring Boot REST API (port 8080)
@@ -163,6 +164,36 @@ services:
     restart: unless-stopped
 
   # ----------------------------------------------------------------------------
+  # REDIS COMMANDER - Redis Management Interface
+  # ----------------------------------------------------------------------------
+  # Web-based UI for monitoring and managing Redis.
+  # Auto-connects to the local Redis container.
+  #
+  # Port 8086: Web interface
+  #
+  # Access: http://localhost:8086
+  # ----------------------------------------------------------------------------
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: logforwarder-redis-commander
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8086:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - logforwarder-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
   # POSTGRESQL - Transactional Database
   # ----------------------------------------------------------------------------
   # Stores configuration data requiring ACID compliance.
@@ -255,24 +286,36 @@ services:
     restart: unless-stopped
 
   # ----------------------------------------------------------------------------
-  # TABIX - ClickHouse Web UI
+  # KAFKA UI - Kafka Management Interface
   # ----------------------------------------------------------------------------
-  # Web-based UI for ClickHouse database management.
-  # Provides query editor, schema browser, and visualization.
+  # Web-based UI for monitoring and managing Apache Kafka clusters.
+  # Provides topic management, consumer group monitoring, and message browsing.
   #
-  # Port 8124: Web interface
+  # Port 8085: Web interface
   #
-  # Access: http://localhost:8124
-  # Connect to: http://clickhouse:8123
+  # Access: http://localhost:8085
   # ----------------------------------------------------------------------------
-  tabix:
-    image: spoonest/clickhouse-tabix-web-client:stable
-    container_name: logforwarder-tabix
-    ports:
-      - "8124:80"
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: logforwarder-kafka-ui
     depends_on:
-      clickhouse:
+      kafka:
         condition: service_healthy
+    ports:
+      - "8085:8080"
+    environment:
+      # Kafka cluster configuration
+      KAFKA_CLUSTERS_0_NAME: logforwarder
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      # UI settings
+      DYNAMIC_CONFIG_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - logforwarder-network
     restart: unless-stopped
@@ -451,6 +494,7 @@ volumes:
   # Redis persistence
   redis_data:
     name: logforwarder_redis_data
+
   # PostgreSQL data
   postgres_data:
     name: logforwarder_postgres_data

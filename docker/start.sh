@@ -15,6 +15,7 @@
 #   logs        View logs (follow mode)
 #   status      Show status of all services
 #   clean       Stop services and remove volumes
+#   fresh       Remove everything and start fresh (clean + dev)
 #   build       Build all Docker images
 #   help        Show this help message
 # ==============================================================================
@@ -72,6 +73,8 @@ cmd_dev() {
     echo "  - PostgreSQL (localhost:5432)"
     echo "  - Kafka (localhost:9092)"
     echo "  - Tabix UI (http://localhost:8124)"
+    echo "  - Kafka UI (http://localhost:8085)"
+    echo "  - Redis Commander (http://localhost:8086)"
     echo "  - Middleware API (http://localhost:8080)"
     echo "  - LogForwarder Agent (http://localhost:9090)"
     echo "  - UI (http://localhost:3000)"
@@ -137,6 +140,40 @@ cmd_clean() {
     print_info "All services and volumes removed."
 }
 
+cmd_fresh() {
+    print_header "Fresh Start - Removing Everything and Starting Clean"
+    echo ""
+    print_warning "This will:"
+    echo "  - Stop all running services"
+    echo "  - Remove all containers"
+    echo "  - Remove all volumes (DATA WILL BE LOST!)"
+    echo "  - Remove all images built by this project"
+    echo "  - Start fresh development environment"
+    echo ""
+    read -p "Are you sure you want to start fresh? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+    echo ""
+    print_info "Stopping all services..."
+    docker-compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true
+    docker-compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+    
+    print_info "Removing project images..."
+    docker images --filter "reference=*logforwarder*" -q | xargs -r docker rmi -f 2>/dev/null || true
+    
+    print_info "Pruning unused Docker resources..."
+    docker network prune -f 2>/dev/null || true
+    
+    echo ""
+    print_info "Starting fresh development environment..."
+    echo ""
+    cmd_dev
+    echo ""
+    print_info "Fresh deployment complete!"
+}
+
 cmd_build() {
     print_info "Building all Docker images..."
     docker-compose -f docker-compose.yml build $SERVICE
@@ -159,6 +196,7 @@ cmd_help() {
     echo "  logs      View logs in follow mode (optionally specify service)"
     echo "  status    Show status of all services"
     echo "  clean     Stop services and remove all volumes (DATA LOSS!)"
+    echo "  fresh     Remove everything and start fresh deployment"
     echo "  build     Build all Docker images"
     echo "  help      Show this help message"
     echo ""
@@ -170,7 +208,7 @@ cmd_help() {
     echo ""
     echo "Service names:"
     echo "  clickhouse, elasticsearch, redis, postgres, zookeeper,"
-    echo "  kafka, tabix, middleware, logforwarder, ui"
+    echo "  kafka, kafka-ui, tabix, middleware, logforwarder, ui"
     echo ""
 }
 
@@ -196,6 +234,9 @@ case "$COMMAND" in
         ;;
     clean)
         cmd_clean
+        ;;
+    fresh)
+        cmd_fresh
         ;;
     build)
         cmd_build
