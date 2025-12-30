@@ -55,8 +55,8 @@ spring:
 
     postgresql:
       url: ${POSTGRESQL_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=logforwarder}
-      username: ${POSTGRESQL_USER:postgres}
-      password: ${POSTGRESQL_PASSWORD:admin}
+      username: ${POSTGRESQL_USER:logforwarder}
+      password: ${POSTGRESQL_PASSWORD:logforwarder_password}
       driver-class-name: org.postgresql.Driver
       hikari:
         maximum-pool-size: 20
