@@ -5,8 +5,9 @@ import com.monitoring.logforwarder.service.EventService;
 import com.monitoring.logforwarder.service.ForwarderService;
 import com.monitoring.logforwarder.service.AlertService;
 import com.monitoring.logforwarder.service.MetricsService;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,19 +42,16 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/api/v1/dashboard")
 @CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class DashboardController {
 
-    @Autowired
-    private EventService eventService;
+    private final EventService eventService;
 
-    @Autowired
-    private ForwarderService forwarderService;
+    private final ForwarderService forwarderService;
 
-    @Autowired
-    private AlertService alertService;
+    private final AlertService alertService;
 
-    @Autowired
-    private MetricsService metricsService;
+    private final MetricsService metricsService;
 
     /**
      * Retrieves comprehensive dashboard summary data.
@@ -84,32 +82,14 @@ public class DashboardController {
                 summary.put("system_metrics", metricsService.getSystemMetrics().get());
                 summary.put("app_metrics", metricsService.getApplicationMetrics().get());
                 
-                return ResponseEntity.ok(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Dashboard summary retrieved")
-                    .code("DASHBOARD_SUMMARY_SUCCESS")
-                    .data(summary)
-                    .timestamp(LocalDateTime.now())
-                    .build());
+                return ApiResponseBuilder.success("Dashboard summary retrieved", "DASHBOARD_SUMMARY_SUCCESS", summary);
             } catch (Exception ex) {
                 log.error("Error building dashboard summary", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("DASHBOARD_SUMMARY_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "DASHBOARD_SUMMARY_FAILED", HttpStatus.BAD_REQUEST);
             }
         }).exceptionally(ex -> {
             log.error("Error getting dashboard summary", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("DASHBOARD_SUMMARY_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "DASHBOARD_SUMMARY_FAILED", HttpStatus.BAD_REQUEST);
         });
     }
 
@@ -123,22 +103,10 @@ public class DashboardController {
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getRecentLogs(
             @RequestParam(defaultValue = "100") Integer limit) {
         return eventService.getRecentEvents(limit)
-            .thenApply(logs -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Recent logs retrieved")
-                .code("GET_RECENT_LOGS_SUCCESS")
-                .data(logs)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Recent logs retrieved", "GET_RECENT_LOGS_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Error retrieving recent logs", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("GET_RECENT_LOGS_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "GET_RECENT_LOGS_FAILED", HttpStatus.BAD_REQUEST);
             });
     }
 
@@ -150,22 +118,10 @@ public class DashboardController {
     @GetMapping("/health")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getSystemHealth() {
         return metricsService.getSystemMetrics()
-            .thenApply(metrics -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("System health retrieved")
-                .code("HEALTH_CHECK_SUCCESS")
-                .data(metrics)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("System health retrieved", "HEALTH_CHECK_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Error retrieving system health", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("HEALTH_CHECK_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "HEALTH_CHECK_FAILED", HttpStatus.BAD_REQUEST);
             });
     }
 }

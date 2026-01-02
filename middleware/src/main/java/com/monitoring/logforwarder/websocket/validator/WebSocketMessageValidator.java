@@ -1,5 +1,6 @@
 package com.monitoring.logforwarder.websocket.validator;
 
+import com.monitoring.logforwarder.websocket.*;
 import com.monitoring.logforwarder.websocket.WebSocketMessageTypes;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -21,37 +22,37 @@ public class WebSocketMessageValidator {
 
     public ValidationResult validate(Object message) {
         if (message == null) {
-            return createError(WebSocketMessageTypes.ErrorCode.INVALID_MESSAGE_FORMAT,
+            return createError(ErrorCode.INVALID_MESSAGE_FORMAT,
                     "Message cannot be null");
         }
 
         try {
-            if (message instanceof WebSocketMessageTypes.GenericMessage) {
-                return validateGenericMessage((WebSocketMessageTypes.GenericMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.SubscriptionMessage) {
-                return validateSubscriptionMessage((WebSocketMessageTypes.SubscriptionMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.AlertMessage) {
-                return validateAlertMessage((WebSocketMessageTypes.AlertMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.MetricsMessage) {
-                return validateMetricsMessage((WebSocketMessageTypes.MetricsMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.ErrorMessage) {
-                return validateErrorMessage((WebSocketMessageTypes.ErrorMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.AckMessage) {
-                return validateAckMessage((WebSocketMessageTypes.AckMessage) message);
-            } else if (message instanceof WebSocketMessageTypes.QueryMessage) {
-                return validateQueryMessage((WebSocketMessageTypes.QueryMessage) message);
+            if (message instanceof GenericMessage) {
+                return validateGenericMessage((GenericMessage) message);
+            } else if (message instanceof SubscriptionMessage) {
+                return validateSubscriptionMessage((SubscriptionMessage) message);
+            } else if (message instanceof AlertMessage) {
+                return validateAlertMessage((AlertMessage) message);
+            } else if (message instanceof MetricsMessage) {
+                return validateMetricsMessage((MetricsMessage) message);
+            } else if (message instanceof ErrorMessage) {
+                return validateErrorMessage((ErrorMessage) message);
+            } else if (message instanceof AckMessage) {
+                return validateAckMessage((AckMessage) message);
+            } else if (message instanceof QueryMessage) {
+                return validateQueryMessage((QueryMessage) message);
             } else {
-                return createError(WebSocketMessageTypes.ErrorCode.INVALID_MESSAGE_FORMAT,
+                return createError(ErrorCode.INVALID_MESSAGE_FORMAT,
                         "Unknown message type: " + message.getClass().getSimpleName());
             }
         } catch (Exception e) {
             log.error("Validation error", e);
-            return createError(WebSocketMessageTypes.ErrorCode.INTERNAL_ERROR,
+            return createError(ErrorCode.INTERNAL_ERROR,
                     "Validation failed: " + e.getMessage());
         }
     }
 
-    private ValidationResult validateGenericMessage(WebSocketMessageTypes.GenericMessage message) {
+    private ValidationResult validateGenericMessage(GenericMessage message) {
         List<String> errors = new ArrayList<>();
 
         if (message.getType() == null || message.getType().trim().isEmpty()) {
@@ -105,7 +106,7 @@ public class WebSocketMessageValidator {
         return errors;
     }
 
-    private ValidationResult validateSubscriptionMessage(WebSocketMessageTypes.SubscriptionMessage message) {
+    private ValidationResult validateSubscriptionMessage(SubscriptionMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -143,7 +144,7 @@ public class WebSocketMessageValidator {
             : ValidationResult.invalid(errors, message.getRequestId());
     }
 
-    private ValidationResult validateAlertMessage(WebSocketMessageTypes.AlertMessage message) {
+    private ValidationResult validateAlertMessage(AlertMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -169,7 +170,7 @@ public class WebSocketMessageValidator {
             : ValidationResult.invalid(errors, message.getRequestId());
     }
 
-    private ValidationResult validateMetricsMessage(WebSocketMessageTypes.MetricsMessage message) {
+    private ValidationResult validateMetricsMessage(MetricsMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -198,7 +199,7 @@ public class WebSocketMessageValidator {
             : ValidationResult.invalid(errors, message.getRequestId());
     }
 
-    private ValidationResult validateErrorMessage(WebSocketMessageTypes.ErrorMessage message) {
+    private ValidationResult validateErrorMessage(ErrorMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -222,7 +223,7 @@ public class WebSocketMessageValidator {
             : ValidationResult.invalid(errors, message.getRequestId());
     }
 
-    private ValidationResult validateAckMessage(WebSocketMessageTypes.AckMessage message) {
+    private ValidationResult validateAckMessage(AckMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -246,7 +247,7 @@ public class WebSocketMessageValidator {
             : ValidationResult.invalid(errors, message.getRequestId());
     }
 
-    private ValidationResult validateQueryMessage(WebSocketMessageTypes.QueryMessage message) {
+    private ValidationResult validateQueryMessage(QueryMessage message) {
         List<String> errors = new ArrayList<>();
 
         errors.addAll(validateBaseFields(message.getType(), message.getVersion(), message.getRequestId(), message.getTimestamp()));
@@ -313,52 +314,5 @@ public class WebSocketMessageValidator {
             List.of(errorMessage),
             null
         );
-    }
-
-    public static class ValidationResult {
-        private final boolean valid;
-        private final List<String> errors;
-        private final String requestId;
-
-        private ValidationResult(boolean valid, List<String> errors, String requestId) {
-            this.valid = valid;
-            this.errors = errors;
-            this.requestId = requestId;
-        }
-
-        public static ValidationResult valid() {
-            return new ValidationResult(true, List.of(), null);
-        }
-
-        public static ValidationResult invalid(List<String> errors, String requestId) {
-            return new ValidationResult(false, new ArrayList<>(errors), requestId);
-        }
-
-        public boolean isValid() {
-            return valid;
-        }
-
-        public List<String> getErrors() {
-            return new ArrayList<>(errors);
-        }
-
-        public String getRequestId() {
-            return requestId;
-        }
-
-        public WebSocketMessageTypes.ErrorMessage toErrorMessage() {
-            String combinedErrors = String.join("; ", errors);
-            return WebSocketMessageTypes.ErrorMessage.builder()
-                .type("ERROR")
-                .version(WebSocketMessageTypes.VERSION)
-                .requestId(requestId != null ? requestId : "unknown")
-                .timestamp(LocalDateTime.now())
-                .errorCode(WebSocketMessageTypes.ErrorCode.VALIDATION_FAILED)
-                .errorMessage(combinedErrors)
-                .severity(WebSocketMessageTypes.ErrorSeverity.ERROR)
-                .originalRequestId(requestId)
-                .context("Message validation")
-                .build();
-        }
     }
 }

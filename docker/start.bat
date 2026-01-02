@@ -156,15 +156,16 @@ if /i not "%CONFIRM%"=="y" (
     goto :eof
 )
 echo.
-echo [INFO] Stopping all services...
-docker-compose -f docker-compose.yml down -v --remove-orphans 2>nul
-docker-compose -f docker-compose.prod.yml down -v --remove-orphans 2>nul
+echo [INFO] Stopping all services and removing images...
+docker-compose -f docker-compose.yml down -v --rmi all --remove-orphans 2>nul
+docker-compose -f docker-compose.prod.yml down -v --rmi all --remove-orphans 2>nul
 
-echo [INFO] Removing project images...
+echo [INFO] Removing any remaining project images...
 for /f "tokens=*" %%i in ('docker images --filter "reference=*logforwarder*" -q 2^>nul') do docker rmi -f %%i 2>nul
+for /f "tokens=*" %%i in ('docker images --filter "reference=*monitoring*" -q 2^>nul') do docker rmi -f %%i 2>nul
 
 echo [INFO] Pruning unused Docker resources...
-docker network prune -f 2>nul
+docker system prune -f 2>nul
 
 echo.
 echo [INFO] Starting fresh development environment...

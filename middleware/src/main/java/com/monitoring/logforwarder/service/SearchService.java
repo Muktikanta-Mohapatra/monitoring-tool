@@ -5,8 +5,8 @@ import com.monitoring.logforwarder.dto.SearchResultDTO;
 import com.monitoring.logforwarder.dto.EventDTO;
 import com.monitoring.logforwarder.repository.clickhouse.ClickHouseEventRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,10 +23,10 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class SearchService {
 
-    @Autowired
-    private ClickHouseEventRepository clickHouseEventRepository;
+    private final ClickHouseEventRepository clickHouseEventRepository;
 
     @Cacheable(value = "searchResults", key = "#query.query + '-' + #query.page")
     public CompletableFuture<SearchResultDTO> search(SearchQueryDTO query) {

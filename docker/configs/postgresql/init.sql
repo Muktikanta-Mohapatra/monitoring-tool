@@ -20,8 +20,21 @@
 -- - checkpoints: File reading checkpoints
 -- =============================================================================
 
--- Use the public schema in the logforwarder database
--- Tables are created in the 'logforwarder' database (set via POSTGRES_DB env var)
+-- =============================================================================
+-- CREATE APPLICATION USER AND DATABASE
+-- =============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'logforwarder') THEN
+        CREATE USER logforwarder WITH PASSWORD 'logforwarder';
+    END IF;
+END
+$$;
+
+CREATE DATABASE logforwarder OWNER logforwarder;
+
+\connect logforwarder
+
 SET search_path TO public;
 
 -- =============================================================================
@@ -295,8 +308,7 @@ CREATE INDEX idx_checkpoints_last_update ON checkpoints (last_update DESC);
 -- =============================================================================
 -- GRANT PERMISSIONS
 -- =============================================================================
--- Grant all privileges to the logforwarder user
--- =============================================================================
 GRANT ALL PRIVILEGES ON SCHEMA public TO logforwarder;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO logforwarder;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO logforwarder;
+

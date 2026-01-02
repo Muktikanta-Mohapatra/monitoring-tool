@@ -5,8 +5,9 @@ import com.monitoring.logforwarder.repository.postgresql.ForwarderApiKeyReposito
 import com.monitoring.logforwarder.service.AuditService;
 import com.monitoring.logforwarder.service.ForwarderService;
 import com.monitoring.logforwarder.util.ClientInfoExtractor;
+import com.monitoring.logforwarder.util.HttpErrorResponseWriter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -27,19 +28,16 @@ import java.util.*;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ForwarderAuthFilter extends OncePerRequestFilter {
 
-    @Autowired
-    private ForwarderApiKeyRepository forwarderApiKeyRepository;
+    private final ForwarderApiKeyRepository forwarderApiKeyRepository;
 
-    @Autowired
-    private ForwarderService forwarderService;
+    private final ForwarderService forwarderService;
 
-    @Autowired
-    private AuditService auditService;
+    private final AuditService auditService;
 
-    @Autowired
-    private ForwarderRateLimiter rateLimiter;
+    private final ForwarderRateLimiter rateLimiter;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(SecurityConstants.BCRYPT_STRENGTH);
 
@@ -62,23 +60,23 @@ public class ForwarderAuthFilter extends OncePerRequestFilter {
                     log.warn("Missing API key for batch endpoint from IP: {}", clientIp);
                     auditService.logAction(null, "FORWARDER_UNKNOWN", "MISSING_API_KEY",
                         "FORWARDER", "UNKNOWN", "FAILED", clientIp, request.getHeader("User-Agent"));
-                    response.setStatus(401);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"error\": \"Unauthorized - API key required\"}");
+                    HttpErrorResponseWriter.writeUnauthorized(response, "API key required", "MISSING_API_KEY");
                     return;
                 }
 
-                Optional<ForwarderApiKey> forwarderApiKeyOpt = findValidApiKey(apiKey);
-                if (!forwarderApiKeyOpt.isPresent()) {
+                ApiKeyValidationResult validationResult = validateApiKey(apiKey);
+                if (!validationResult.isValid()) {
                     String clientIp = ClientInfoExtractor.getClientIp(request);
-                    log.warn("Invalid API key attempt from IP: {}", clientIp);
-                    auditService.logAction(null, "FORWARDER_UNKNOWN", "API_KEY_VALIDATION_FAILED",
-                        "FORWARDER", "UNKNOWN", "FAILED", clientIp, request.getHeader("User-Agent"));
-                    response.setStatus(401);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"error\": \"Unauthorized - Invalid or expired API key\"}");
+                    String maskedKey = maskApiKey(apiKey);
+                    log.warn("Invalid API key attempt from IP: {}, reason: {}, key: {}", 
+                        clientIp, validationResult.getReason(), maskedKey);
+                    auditService.logActionWithChanges(null, "FORWARDER_UNKNOWN", "API_KEY_VALIDATION_FAILED",
+                        "FORWARDER", "UNKNOWN", null, validationResult.getReason(), 
+                        clientIp, request.getHeader("User-Agent"));
+                    HttpErrorResponseWriter.writeUnauthorized(response, validationResult.getReason(), "API_KEY_INVALID");
                     return;
                 }
+                Optional<ForwarderApiKey> forwarderApiKeyOpt = Optional.of(validationResult.getApiKey());
 
                 ForwarderApiKey forwarderApiKey = forwarderApiKeyOpt.get();
                 String forwarderId = forwarderApiKey.getForwarderId();
@@ -89,9 +87,7 @@ public class ForwarderAuthFilter extends OncePerRequestFilter {
                     auditService.logAction(null, forwarderId, "RATE_LIMIT_EXCEEDED",
                         "FORWARDER", forwarderId, "RATE_LIMIT_EXCEEDED", clientIp, 
                         request.getHeader("User-Agent"));
-                    response.setStatus(429);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"error\": \"Rate limit exceeded\"}");
+                    HttpErrorResponseWriter.writeTooManyRequests(response, "Rate limit exceeded");
                     return;
                 }
 
@@ -123,17 +119,34 @@ public class ForwarderAuthFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private Optional<ForwarderApiKey> findValidApiKey(String plainApiKey) {
+    private ApiKeyValidationResult validateApiKey(String plainApiKey) {
         try {
-            return forwarderApiKeyRepository.findAll().stream()
-                .filter(key -> passwordEncoder.matches(plainApiKey, key.getApiKeyHash()))
-                .filter(key -> key.getStatus().name().equals("ACTIVE"))
-                .filter(key -> key.getExpiresAt() == null || key.getExpiresAt().isAfter(LocalDateTime.now()))
-                .findFirst();
+            List<ForwarderApiKey> allKeys = forwarderApiKeyRepository.findAll();
+            
+            for (ForwarderApiKey key : allKeys) {
+                if (passwordEncoder.matches(plainApiKey, key.getApiKeyHash())) {
+                    if (!key.getStatus().name().equals("ACTIVE")) {
+                        return ApiKeyValidationResult.invalid("API key is " + key.getStatus().name().toLowerCase());
+                    }
+                    if (key.getExpiresAt() != null && key.getExpiresAt().isBefore(LocalDateTime.now())) {
+                        return ApiKeyValidationResult.invalid("API key has expired");
+                    }
+                    return ApiKeyValidationResult.valid(key);
+                }
+            }
+            
+            return ApiKeyValidationResult.invalid("API key not found in database");
         } catch (Exception e) {
             log.error("Error validating API key", e);
-            return Optional.empty();
+            return ApiKeyValidationResult.invalid("Internal error during validation");
         }
+    }
+
+    private String maskApiKey(String apiKey) {
+        if (apiKey == null || apiKey.length() < 8) {
+            return "***";
+        }
+        return apiKey.substring(0, 4) + "..." + apiKey.substring(apiKey.length() - 4);
     }
 
 }

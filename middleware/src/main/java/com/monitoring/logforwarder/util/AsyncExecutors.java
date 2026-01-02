@@ -1,7 +1,7 @@
 package com.monitoring.logforwarder.util;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
@@ -11,10 +11,10 @@ import java.util.concurrent.Executor;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class AsyncExecutors {
 
-    @Autowired
-    private ApplicationContext applicationContext;
+    private final ApplicationContext applicationContext;
 
     public static final String EVENT_PROCESSING_EXECUTOR = "eventProcessingExecutor";
     public static final String KAFKA_PUBLISHING_EXECUTOR = "kafkaPublishingExecutor";

@@ -3,13 +3,13 @@ package com.monitoring.logforwarder.controller;
 import com.monitoring.logforwarder.dto.ApiResponseDTO;
 import com.monitoring.logforwarder.dto.AlertDTO;
 import com.monitoring.logforwarder.service.AlertService;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -45,10 +45,10 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/api/v1/alerts")
 @CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class AlertController {
 
-    @Autowired
-    private AlertService alertService;
+    private final AlertService alertService;
 
     /**
      * Retrieves alerts with optional filters.
@@ -64,22 +64,10 @@ public class AlertController {
             @RequestParam(required = false) String severity,
             @RequestParam(defaultValue = "0") Integer page) {
         return alertService.getAlerts(status, severity, page)
-            .thenApply(alerts -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Alerts retrieved")
-                .code("GET_ALERTS_SUCCESS")
-                .data(alerts)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Alerts retrieved", "GET_ALERTS_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Error retrieving alerts", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("GET_ALERTS_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "GET_ALERTS_FAILED", HttpStatus.BAD_REQUEST);
             });
     }
 
@@ -92,23 +80,10 @@ public class AlertController {
     @PostMapping
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> createAlert(@RequestBody AlertDTO alertDTO) {
         return alertService.triggerAlert(alertDTO)
-            .thenApply(alert -> ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Alert created")
-                    .code("ALERT_CREATED")
-                    .data(alert)
-                    .timestamp(LocalDateTime.now())
-                    .build()))
+            .thenApply(ApiResponseBuilder.createdMapper("Alert created", "ALERT_CREATED"))
             .exceptionally(ex -> {
                 log.error("Error creating alert", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("CREATE_ALERT_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "CREATE_ALERT_FAILED", HttpStatus.BAD_REQUEST);
             });
     }
 
@@ -124,22 +99,10 @@ public class AlertController {
             @PathVariable Long id,
             @RequestParam String acknowledgedBy) {
         return alertService.acknowledgeAlert(id, acknowledgedBy)
-            .thenApply(alert -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Alert acknowledged")
-                .code("ALERT_ACKNOWLEDGED")
-                .data(alert)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Alert acknowledged", "ALERT_ACKNOWLEDGED"))
             .exceptionally(ex -> {
                 log.error("Error acknowledging alert", ex);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("ACK_ALERT_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "ACK_ALERT_FAILED", HttpStatus.NOT_FOUND);
             });
     }
 
@@ -155,22 +118,10 @@ public class AlertController {
             @PathVariable Long id,
             @RequestParam String message) {
         return alertService.resolveAlert(id, message)
-            .thenApply(alert -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Alert resolved")
-                .code("ALERT_RESOLVED")
-                .data(alert)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Alert resolved", "ALERT_RESOLVED"))
             .exceptionally(ex -> {
                 log.error("Error resolving alert", ex);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("RESOLVE_ALERT_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "RESOLVE_ALERT_FAILED", HttpStatus.NOT_FOUND);
             });
     }
 }

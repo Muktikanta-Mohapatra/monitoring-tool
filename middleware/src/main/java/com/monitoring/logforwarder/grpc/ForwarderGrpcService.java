@@ -9,8 +9,8 @@ import com.forwarder.v1.HealthCheckRequest;
 import com.forwarder.v1.HealthCheckResponse;
 import com.monitoring.logforwarder.service.EventService;
 import io.grpc.stub.StreamObserver;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -20,12 +20,8 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class ForwarderGrpcService extends ForwarderServiceGrpc.ForwarderServiceImplBase {
 
-    @Autowired
+    @Setter
     private EventService eventService;
-
-    public void setEventService(EventService eventService) {
-        this.eventService = eventService;
-    }
 
     @Override
     public StreamObserver<EventBatch> sendEvents(StreamObserver<AckResponse> responseObserver) {

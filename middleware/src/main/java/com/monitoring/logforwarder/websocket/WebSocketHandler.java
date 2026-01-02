@@ -1,9 +1,11 @@
 package com.monitoring.logforwarder.websocket;
 
+import com.monitoring.logforwarder.websocket.validator.QueryValidationResult;
 import com.monitoring.logforwarder.websocket.validator.QueryValidator;
+import com.monitoring.logforwarder.websocket.validator.ValidationResult;
 import com.monitoring.logforwarder.websocket.validator.WebSocketMessageValidator;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
@@ -16,29 +18,26 @@ import java.util.UUID;
 
 @Slf4j
 @Controller
+@RequiredArgsConstructor
 public class WebSocketHandler {
 
-    @Autowired
-    private EventSubscriptionManager subscriptionManager;
+    private final EventSubscriptionManager subscriptionManager;
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    @Autowired
-    private WebSocketMessageValidator messageValidator;
+    private final WebSocketMessageValidator messageValidator;
 
-    @Autowired
-    private QueryValidator queryValidator;
+    private final QueryValidator queryValidator;
 
     @MessageMapping("/subscribe")
-    public void handleSubscription(@Payload WebSocketMessageTypes.SubscriptionMessage message, SimpMessageHeaderAccessor headerAccessor) {
+    public void handleSubscription(@Payload SubscriptionMessage message, SimpMessageHeaderAccessor headerAccessor) {
         String requestId = message.getRequestId() != null ? message.getRequestId() : generateRequestId();
         String sessionId = headerAccessor.getSessionId();
         String userId = extractUserId(headerAccessor);
 
-        WebSocketMessageValidator.ValidationResult validationResult = messageValidator.validate(message);
+        ValidationResult validationResult = messageValidator.validate(message);
         if (!validationResult.isValid()) {
-            WebSocketMessageTypes.ErrorMessage errorMsg = validationResult.toErrorMessage();
+            ErrorMessage errorMsg = validationResult.toErrorMessage();
             errorMsg.setRequestId(requestId);
             errorMsg.setOriginalRequestId(requestId);
             sendErrorResponse(userId, requestId, errorMsg);
@@ -49,7 +48,7 @@ public class WebSocketHandler {
         String query = message.getQuery();
         if (query != null && !query.trim().isEmpty()) {
             List<String> authorizedIndexes = message.getIndexes();
-            QueryValidator.QueryValidationResult queryValidationResult = queryValidator.validate(query, null, authorizedIndexes);
+            QueryValidationResult queryValidationResult = queryValidator.validate(query, null, authorizedIndexes);
             if (!queryValidationResult.isValid()) {
                 sendErrorResponse(userId, requestId, queryValidationResult.toErrorMessage(requestId));
                 log.warn("Query validation failed for user {}: {}", userId, queryValidationResult.getErrors());
@@ -57,7 +56,7 @@ public class WebSocketHandler {
             }
         }
 
-        EventSubscriptionManager.SubscriptionLimitCheckResult limitResult = subscriptionManager.checkSubscriptionLimit(userId);
+        SubscriptionLimitCheckResult limitResult = subscriptionManager.checkSubscriptionLimit(userId);
         if (!limitResult.isAllowed()) {
             sendErrorResponse(userId, requestId, limitResult.toErrorMessage(requestId));
             log.warn("Subscription limit exceeded for user {}: current={}, max={}", userId, limitResult.getCurrentCount(), limitResult.getMaxCount());
@@ -66,7 +65,7 @@ public class WebSocketHandler {
 
         subscriptionManager.subscribe(userId, sessionId, query != null ? query : "");
 
-        WebSocketMessageTypes.AckMessage response = WebSocketMessageTypes.AckMessage.builder()
+        AckMessage response = AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -82,14 +81,14 @@ public class WebSocketHandler {
     }
 
     @MessageMapping("/unsubscribe")
-    public void handleUnsubscription(@Payload WebSocketMessageTypes.SubscriptionMessage message, SimpMessageHeaderAccessor headerAccessor) {
+    public void handleUnsubscription(@Payload SubscriptionMessage message, SimpMessageHeaderAccessor headerAccessor) {
         String requestId = message.getRequestId() != null ? message.getRequestId() : generateRequestId();
         String sessionId = headerAccessor.getSessionId();
         String userId = extractUserId(headerAccessor);
 
-        WebSocketMessageValidator.ValidationResult validationResult = messageValidator.validate(message);
+        ValidationResult validationResult = messageValidator.validate(message);
         if (!validationResult.isValid()) {
-            WebSocketMessageTypes.ErrorMessage errorMsg = validationResult.toErrorMessage();
+            ErrorMessage errorMsg = validationResult.toErrorMessage();
             errorMsg.setRequestId(requestId);
             errorMsg.setOriginalRequestId(requestId);
             sendErrorResponse(userId, requestId, errorMsg);
@@ -100,7 +99,7 @@ public class WebSocketHandler {
         String query = message.getQuery();
         subscriptionManager.unsubscribe(userId, sessionId, query != null ? query : "");
 
-        WebSocketMessageTypes.AckMessage response = WebSocketMessageTypes.AckMessage.builder()
+        AckMessage response = AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -117,12 +116,12 @@ public class WebSocketHandler {
 
     @MessageMapping("/ping")
     @SendTo("/topic/pong")
-    public WebSocketMessageTypes.AckMessage handlePing(@Payload WebSocketMessageTypes.GenericMessage message) {
+    public AckMessage handlePing(@Payload GenericMessage message) {
         String requestId = message.getRequestId() != null ? message.getRequestId() : generateRequestId();
 
-        WebSocketMessageValidator.ValidationResult validationResult = messageValidator.validate(message);
+        ValidationResult validationResult = messageValidator.validate(message);
         if (!validationResult.isValid()) {
-            return WebSocketMessageTypes.AckMessage.builder()
+            return AckMessage.builder()
                     .type("ACK")
                     .version("1.0")
                     .requestId(generateRequestId())
@@ -133,7 +132,7 @@ public class WebSocketHandler {
                     .build();
         }
 
-        return WebSocketMessageTypes.AckMessage.builder()
+        return AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -145,13 +144,13 @@ public class WebSocketHandler {
     }
 
     @MessageMapping("/query")
-    public void handleQueryRequest(@Payload WebSocketMessageTypes.QueryMessage message, SimpMessageHeaderAccessor headerAccessor) {
+    public void handleQueryRequest(@Payload QueryMessage message, SimpMessageHeaderAccessor headerAccessor) {
         String requestId = message.getRequestId() != null ? message.getRequestId() : generateRequestId();
         String userId = extractUserId(headerAccessor);
 
-        WebSocketMessageValidator.ValidationResult validationResult = messageValidator.validate(message);
+        ValidationResult validationResult = messageValidator.validate(message);
         if (!validationResult.isValid()) {
-            WebSocketMessageTypes.ErrorMessage errorMsg = validationResult.toErrorMessage();
+            ErrorMessage errorMsg = validationResult.toErrorMessage();
             errorMsg.setRequestId(requestId);
             errorMsg.setOriginalRequestId(requestId);
             sendErrorResponse(userId, requestId, errorMsg);
@@ -161,9 +160,9 @@ public class WebSocketHandler {
 
         String query = message.getQueryText();
         if (query != null && !query.trim().isEmpty()) {
-            QueryValidator.QueryValidationResult queryValidationResult = queryValidator.validate(query, null);
+            QueryValidationResult queryValidationResult = queryValidator.validate(query, null);
             if (!queryValidationResult.isValid()) {
-                WebSocketMessageTypes.ErrorMessage errorMsg = queryValidationResult.toErrorMessage(requestId);
+                ErrorMessage errorMsg = queryValidationResult.toErrorMessage(requestId);
                 sendErrorResponse(userId, requestId, errorMsg);
                 log.warn("Query validation failed for user {}: {}", userId, queryValidationResult.getErrors());
                 return;
@@ -172,7 +171,7 @@ public class WebSocketHandler {
 
         log.info("User {} executing query with requestId {}", userId, requestId);
 
-        WebSocketMessageTypes.AckMessage response = WebSocketMessageTypes.AckMessage.builder()
+        AckMessage response = AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -191,7 +190,7 @@ public class WebSocketHandler {
         String requestId = generateRequestId();
         log.info("User {} subscribed to alerts with requestId {}", userId, requestId);
 
-        WebSocketMessageTypes.AckMessage response = WebSocketMessageTypes.AckMessage.builder()
+        AckMessage response = AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -205,13 +204,13 @@ public class WebSocketHandler {
     }
 
     @MessageMapping("/metrics-subscribe")
-    public void handleMetricsSubscription(@Payload WebSocketMessageTypes.MetricsMessage message, SimpMessageHeaderAccessor headerAccessor) {
+    public void handleMetricsSubscription(@Payload MetricsMessage message, SimpMessageHeaderAccessor headerAccessor) {
         String requestId = message.getRequestId() != null ? message.getRequestId() : generateRequestId();
         String userId = extractUserId(headerAccessor);
 
-        WebSocketMessageValidator.ValidationResult validationResult = messageValidator.validate(message);
+        ValidationResult validationResult = messageValidator.validate(message);
         if (!validationResult.isValid()) {
-            WebSocketMessageTypes.ErrorMessage errorMsg = validationResult.toErrorMessage();
+            ErrorMessage errorMsg = validationResult.toErrorMessage();
             errorMsg.setRequestId(requestId);
             errorMsg.setOriginalRequestId(requestId);
             sendErrorResponse(userId, requestId, errorMsg);
@@ -221,7 +220,7 @@ public class WebSocketHandler {
 
         log.info("User {} subscribed to metrics with requestId {}", userId, requestId);
 
-        WebSocketMessageTypes.AckMessage response = WebSocketMessageTypes.AckMessage.builder()
+        AckMessage response = AckMessage.builder()
                 .type("ACK")
                 .version("1.0")
                 .requestId(generateRequestId())
@@ -239,7 +238,7 @@ public class WebSocketHandler {
         log.info("Session {} disconnected and cleaned up", sessionId);
     }
 
-    private void sendErrorResponse(String userId, String requestId, WebSocketMessageTypes.ErrorMessage errorMessage) {
+    private void sendErrorResponse(String userId, String requestId, ErrorMessage errorMessage) {
         messagingTemplate.convertAndSendToUser(userId, "/queue/errors", errorMessage);
     }
 

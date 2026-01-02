@@ -10,8 +10,8 @@ import com.monitoring.logforwarder.repository.postgresql.ForwarderApiKeyReposito
 import com.monitoring.logforwarder.repository.clickhouse.ForwarderRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
 import com.monitoring.logforwarder.util.ClientInfoExtractor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -40,19 +40,16 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ForwarderService {
 
-    @Autowired
-    private ForwarderRepository forwarderRepository;
+    private final ForwarderRepository forwarderRepository;
 
-    @Autowired
-    private ForwarderApiKeyRepository forwarderApiKeyRepository;
+    private final ForwarderApiKeyRepository forwarderApiKeyRepository;
 
-    @Autowired
-    private AuditService auditService;
+    private final AuditService auditService;
 
-    @Autowired
-    private EventProducer eventProducer;
+    private final EventProducer eventProducer;
 
     public CompletableFuture<List<ForwarderDTO>> getAllForwarders() {
         return forwarderRepository.findActiveForwarders()

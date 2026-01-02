@@ -4,8 +4,8 @@ import com.monitoring.logforwarder.dto.AuditLogDTO;
 import com.monitoring.logforwarder.entity.AuditLog;
 import com.monitoring.logforwarder.repository.postgresql.AuditLogRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,10 +19,10 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @Service
 @Transactional(value = "postgresqlTransactionManager")
+@RequiredArgsConstructor
 public class AuditService {
 
-    @Autowired
-    private AuditLogRepository auditLogRepository;
+    private final AuditLogRepository auditLogRepository;
 
     public CompletableFuture<Void> logAction(Long userId, String username, String action, String resourceType, 
                          String resourceId, String status, String ipAddress, String userAgent) {

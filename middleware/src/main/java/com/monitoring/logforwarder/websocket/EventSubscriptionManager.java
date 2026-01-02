@@ -1,9 +1,8 @@
 package com.monitoring.logforwarder.websocket;
 
-import com.monitoring.logforwarder.websocket.WebSocketMessageTypes;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import java.time.LocalDateTime;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -69,7 +68,7 @@ public class EventSubscriptionManager {
         if (currentCount >= MAX_SUBSCRIPTIONS_PER_USER) {
             return SubscriptionLimitCheckResult.exceeded(currentCount, MAX_SUBSCRIPTIONS_PER_USER);
         }
-        return SubscriptionLimitCheckResult.allowed();
+        return SubscriptionLimitCheckResult.allowed(MAX_SUBSCRIPTIONS_PER_USER);
     }
 
     public int getSubscriptionCountForUser(String userId) {
@@ -102,54 +101,5 @@ public class EventSubscriptionManager {
 
     public Map<String, Set<String>> getAllSubscriptions() {
         return new HashMap<>(subscriptions);
-    }
-
-    public static class SubscriptionLimitCheckResult {
-        private final boolean allowed;
-        private final int currentCount;
-        private final int maxCount;
-
-        private SubscriptionLimitCheckResult(boolean allowed, int currentCount, int maxCount) {
-            this.allowed = allowed;
-            this.currentCount = currentCount;
-            this.maxCount = maxCount;
-        }
-
-        public static SubscriptionLimitCheckResult allowed() {
-            return new SubscriptionLimitCheckResult(true, 0, MAX_SUBSCRIPTIONS_PER_USER);
-        }
-
-        public static SubscriptionLimitCheckResult exceeded(int currentCount, int maxCount) {
-            return new SubscriptionLimitCheckResult(false, currentCount, maxCount);
-        }
-
-        public boolean isAllowed() {
-            return allowed;
-        }
-
-        public int getCurrentCount() {
-            return currentCount;
-        }
-
-        public int getMaxCount() {
-            return maxCount;
-        }
-
-        public WebSocketMessageTypes.ErrorMessage toErrorMessage(String requestId) {
-            return WebSocketMessageTypes.ErrorMessage.builder()
-                    .type("ERROR")
-                    .version("1.0")
-                    .requestId(requestId)
-                    .timestamp(LocalDateTime.now())
-                    .errorCode(WebSocketMessageTypes.ErrorCode.SUBSCRIPTION_LIMIT_EXCEEDED)
-                    .errorMessage("Subscription limit exceeded: maximum " + maxCount + " active subscriptions allowed, currently at " + currentCount)
-                    .severity(WebSocketMessageTypes.ErrorSeverity.WARNING)
-                    .details(Map.of(
-                        "currentCount", currentCount,
-                        "maxCount", maxCount,
-                        "limitExceededBy", currentCount - maxCount + 1
-                    ))
-                    .build();
-        }
     }
 }

@@ -39,13 +39,13 @@ public class DataCleanupScheduler {
     private final AuditLogRepository auditLogRepository;
     private final ForwarderMetricsRepository metricsRepository;
 
-    @Value("${app.data.event-retention-days:365}")
+    @Value("${app.data.event-retention-days}")
     private Integer eventRetentionDays;
 
-    @Value("${app.data.audit-log-retention-days:90}")
+    @Value("${app.data.audit-log-retention-days}")
     private Integer auditLogRetentionDays;
 
-    @Value("${app.data.metrics-retention-days:30}")
+    @Value("${app.data.metrics-retention-days}")
     private Integer metricsRetentionDays;
 
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -58,7 +58,7 @@ public class DataCleanupScheduler {
         this.metricsRepository = metricsRepository;
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-events-cron:0 0 2 * * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-events-cron}")
     public void cleanupOldEvents() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -76,7 +76,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-audit-logs-cron:0 0 3 * * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-audit-logs-cron}")
     public void cleanupOldAuditLogs() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -94,7 +94,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-metrics-cron:0 0 4 * * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-metrics-cron}")
     public void cleanupOldMetrics() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -112,7 +112,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-cache-cron:0 0 1 * * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-cache-cron}")
     public void cleanupExpiredCacheEntries() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -128,7 +128,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-elasticsearch-cron:0 0 5 1 * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-elasticsearch-cron}")
     public void cleanupOldElasticsearchIndices() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -145,7 +145,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-temp-files-cron:0 0 0 2 * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-temp-files-cron}")
     public void cleanupTemporaryFiles() {
         CompletableFuture.runAsync(() -> {
             try {
@@ -161,7 +161,7 @@ public class DataCleanupScheduler {
         });
     }
 
-    @Scheduled(cron = "${app.scheduler.cleanup-failed-batches-cron:0 30 * * * *}")
+    @Scheduled(cron = "${app.scheduler.cleanup-failed-batches-cron}")
     public void cleanupFailedEventBatches() {
         CompletableFuture.runAsync(() -> {
             try {

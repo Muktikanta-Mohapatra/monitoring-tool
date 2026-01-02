@@ -4,8 +4,7 @@ import com.monitoring.logforwarder.security.ForwarderAuthFilter;
 import com.monitoring.logforwarder.security.JwtAuthenticationEntryPoint;
 import com.monitoring.logforwarder.security.JwtAuthenticationFilter;
 import com.monitoring.logforwarder.security.SecurityConstants;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -75,22 +74,18 @@ import java.util.Arrays;
         securedEnabled = true,
         jsr250Enabled = true
 )
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-    @Autowired
-    private UserDetailsService userDetailsService;
+    private final UserDetailsService userDetailsService;
 
-    @Autowired
-    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-    @Autowired
-    private ForwarderAuthFilter forwarderAuthFilter;
+    private final ForwarderAuthFilter forwarderAuthFilter;
 
-    @Autowired
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Autowired
-    private CorsConfigurationSource corsConfigurationSource;
+    private final CorsConfigurationSource corsConfigurationSource;
 
     /**
      * Creates the password encoder using BCrypt algorithm.

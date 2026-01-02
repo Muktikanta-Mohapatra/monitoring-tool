@@ -3,8 +3,8 @@ package com.monitoring.logforwarder.security;
 import com.monitoring.logforwarder.entity.User;
 import com.monitoring.logforwarder.exception.ResourceNotFoundException;
 import com.monitoring.logforwarder.repository.postgresql.UserRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -24,10 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional(value = "postgresqlTransactionManager", readOnly = true)

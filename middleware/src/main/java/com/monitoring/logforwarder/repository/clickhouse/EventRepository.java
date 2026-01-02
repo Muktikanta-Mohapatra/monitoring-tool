@@ -1,8 +1,8 @@
 package com.monitoring.logforwarder.repository.clickhouse;
 
 import com.monitoring.logforwarder.entity.Event;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
@@ -15,10 +15,10 @@ import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Repository
+@RequiredArgsConstructor
 public class EventRepository {
 
-    @Autowired
-    private AsyncClickHouseTemplate asyncTemplate;
+    private final AsyncClickHouseTemplate asyncTemplate;
 
     private static final RowMapper<Event> EVENT_ROW_MAPPER = new RowMapper<Event>() {
         @Override

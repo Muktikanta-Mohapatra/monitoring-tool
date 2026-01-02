@@ -36,3 +36,9 @@
 {"timestamp":"2025-12-20T18:21:48.518194120Z","version":1,"action":"Initialize","user":"system","source":"config/inputs.yaml","status":"Success","error_message":null,"changes":null}
 {"timestamp":"2025-12-20T18:36:57.788056958Z","version":1,"action":"Initialize","user":"system","source":"config/inputs.yaml","status":"Success","error_message":null,"changes":null}
 {"timestamp":"2025-12-20T18:39:31.111278969Z","version":1,"action":"Initialize","user":"system","source":"config/inputs.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2025-12-31T19:55:12.250729300Z","version":1,"action":"Initialize","user":"system","source":"config/inputs_grpc.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2025-12-31T20:16:15.080524100Z","version":1,"action":"Initialize","user":"system","source":"config/inputs.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2025-12-31T20:21:16.404017248Z","version":1,"action":"Initialize","user":"system","source":"/app/config/inputs.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2025-12-31T20:24:23.419340610Z","version":1,"action":"Initialize","user":"system","source":"/app/config/inputs.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2026-01-01T19:18:17.692157100Z","version":1,"action":"Initialize","user":"system","source":"var/temp_config.yaml","status":"Success","error_message":null,"changes":null}
+{"timestamp":"2026-01-01T19:31:02.495461800Z","version":1,"action":"Initialize","user":"system","source":"var/temp_config.yaml","status":"Success","error_message":null,"changes":null}

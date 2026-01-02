@@ -112,6 +112,24 @@ app:
     queue-capacity: 100000
     jdbc-batch-size: 1000
     jdbc-fetch-size: 500
+    elasticsearch-batch-size: 500
+
+  data:
+    event-retention-days: ${EVENT_RETENTION_DAYS:365}
+    audit-log-retention-days: ${AUDIT_LOG_RETENTION_DAYS:90}
+    metrics-retention-days: ${METRICS_RETENTION_DAYS:30}
+
+  scheduler:
+    cleanup-events-cron: "${CLEANUP_EVENTS_CRON:0 0 2 * * *}"
+    cleanup-audit-logs-cron: "${CLEANUP_AUDIT_LOGS_CRON:0 0 3 * * *}"
+    cleanup-metrics-cron: "${CLEANUP_METRICS_CRON:0 0 4 * * *}"
+    cleanup-cache-cron: "${CLEANUP_CACHE_CRON:0 0 1 * * *}"
+    cleanup-elasticsearch-cron: "${CLEANUP_ES_CRON:0 0 5 1 * *}"
+    cleanup-temp-files-cron: "${CLEANUP_TEMP_FILES_CRON:0 0 0 2 * *}"
+    cleanup-failed-batches-cron: "${CLEANUP_FAILED_BATCHES_CRON:0 30 * * * *}"
+
+  async-thread-pool-size: 32
+  async-queue-size: 50000
 
   async:
     thread-pool-size: 32

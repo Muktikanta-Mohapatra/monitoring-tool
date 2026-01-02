@@ -9,8 +9,8 @@ import com.monitoring.logforwarder.repository.postgresql.UserRepository;
 import com.monitoring.logforwarder.security.JwtTokenProvider;
 import com.monitoring.logforwarder.security.SecurityConstants;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -42,19 +42,16 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @Service
 @Transactional(value = "postgresqlTransactionManager")
+@RequiredArgsConstructor
 public class AuthService {
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final AuthenticationManager authenticationManager;
 
-    @Autowired
-    private JwtTokenProvider tokenProvider;
+    private final JwtTokenProvider tokenProvider;
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
 
     public CompletableFuture<LoginResponseDTO> authenticate(LoginRequestDTO loginRequest) {
         return AsyncHelper.executeAsyncFuture(() -> {

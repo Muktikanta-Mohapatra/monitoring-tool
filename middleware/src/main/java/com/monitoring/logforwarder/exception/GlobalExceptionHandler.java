@@ -1,6 +1,7 @@
 package com.monitoring.logforwarder.exception;
 
 import com.monitoring.logforwarder.dto.ApiResponseDTO;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
@@ -13,7 +14,6 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,46 +43,40 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponseDTO> handleResourceNotFound(ResourceNotFoundException ex, WebRequest request) {
         log.warn("Resource not found: {}", ex.getMessage());
-        return buildErrorResponse(false, ex.getMessage(), ex.getCode(), HttpStatus.NOT_FOUND);
+        return ApiResponseBuilder.notFound(ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ApiResponseDTO> handleValidationException(ValidationException ex, WebRequest request) {
         log.warn("Validation error: {}", ex.getMessage());
-        ApiResponseDTO response = ApiResponseDTO.builder()
-            .success(false)
-            .message(ex.getMessage())
-            .code(ex.getCode())
-            .timestamp(LocalDateTime.now())
-            .build();
         if (!ex.getFieldErrors().isEmpty()) {
-            response.setData(ex.getFieldErrors());
+            return ApiResponseBuilder.badRequest(ex.getMessage(), ex.getCode(), ex.getFieldErrors());
         }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return ApiResponseBuilder.badRequest(ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiResponseDTO> handleDataAccessException(DataAccessException ex, WebRequest request) {
         log.error("Data access error: {}", ex.getMessage(), ex);
-        return buildErrorResponse(false, ex.getMessage(), ex.getCode(), HttpStatus.INTERNAL_SERVER_ERROR);
+        return ApiResponseBuilder.internalError(ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponseDTO> handleAuthenticationException(AuthenticationException ex, WebRequest request) {
         log.warn("Authentication failed: {}", ex.getMessage());
-        return buildErrorResponse(false, ex.getMessage(), ex.getCode(), HttpStatus.UNAUTHORIZED);
+        return ApiResponseBuilder.unauthorized(ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponseDTO> handleUnauthorizedException(UnauthorizedException ex, WebRequest request) {
         log.warn("Unauthorized access: {}", ex.getMessage());
-        return buildErrorResponse(false, ex.getMessage(), ex.getCode(), HttpStatus.FORBIDDEN);
+        return ApiResponseBuilder.forbidden(ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponseDTO> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
         log.warn("Access denied: {}", ex.getMessage());
-        return buildErrorResponse(false, "Access denied", "ACCESS_DENIED", HttpStatus.FORBIDDEN);
+        return ApiResponseBuilder.forbidden("Access denied", "ACCESS_DENIED");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -92,15 +86,7 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(error ->
             errors.put(error.getField(), error.getDefaultMessage())
         );
-        
-        ApiResponseDTO response = ApiResponseDTO.builder()
-            .success(false)
-            .message("Validation failed")
-            .code("VALIDATION_ERROR")
-            .data(errors)
-            .timestamp(LocalDateTime.now())
-            .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return ApiResponseBuilder.badRequest("Validation failed", "VALIDATION_ERROR", errors);
     }
 
     @ExceptionHandler(ApiException.class)
@@ -110,7 +96,7 @@ public class GlobalExceptionHandler {
         if (status == null) {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
-        return buildErrorResponse(false, ex.getMessage(), ex.getCode(), status);
+        return ApiResponseBuilder.error(ex.getMessage(), ex.getCode(), status);
     }
 
     @ExceptionHandler(ClientAbortException.class)
@@ -137,7 +123,7 @@ public class GlobalExceptionHandler {
             return null;
         }
         log.error("IO exception", ex);
-        return buildErrorResponse(false, "Internal server error", "INTERNAL_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
+        return ApiResponseBuilder.internalError("Internal server error", "INTERNAL_ERROR");
     }
 
     @ExceptionHandler(Exception.class)
@@ -147,7 +133,7 @@ public class GlobalExceptionHandler {
             return null;
         }
         log.error("Unexpected exception", ex);
-        return buildErrorResponse(false, "Internal server error", "INTERNAL_ERROR", HttpStatus.INTERNAL_SERVER_ERROR);
+        return ApiResponseBuilder.internalError("Internal server error", "INTERNAL_ERROR");
     }
 
     private boolean isClientDisconnectException(Exception ex) {
@@ -174,15 +160,5 @@ public class GlobalExceptionHandler {
             cause = cause.getCause();
         }
         return cause;
-    }
-
-    private ResponseEntity<ApiResponseDTO> buildErrorResponse(boolean success, String message, String code, HttpStatus status) {
-        ApiResponseDTO response = ApiResponseDTO.builder()
-            .success(success)
-            .message(message)
-            .code(code)
-            .timestamp(LocalDateTime.now())
-            .build();
-        return ResponseEntity.status(status).body(response);
     }
 }

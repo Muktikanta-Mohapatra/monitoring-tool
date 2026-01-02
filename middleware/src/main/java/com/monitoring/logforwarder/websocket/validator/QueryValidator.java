@@ -1,6 +1,7 @@
 package com.monitoring.logforwarder.websocket.validator;
 
 import com.monitoring.logforwarder.entity.User;
+import com.monitoring.logforwarder.websocket.ErrorCode;
 import com.monitoring.logforwarder.websocket.WebSocketMessageTypes;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -37,14 +38,14 @@ public class QueryValidator {
     public QueryValidationResult validate(String query, User user, List<String> authorizedIndexes) {
         if (query == null || query.trim().isEmpty()) {
             return QueryValidationResult.error(
-                WebSocketMessageTypes.ErrorCode.QUERY_INVALID,
+                ErrorCode.QUERY_INVALID,
                 "Query cannot be empty"
             );
         }
 
         if (query.length() > MAX_QUERY_LENGTH) {
             return QueryValidationResult.error(
-                WebSocketMessageTypes.ErrorCode.QUERY_INVALID,
+                ErrorCode.QUERY_INVALID,
                 "Query exceeds maximum length of " + MAX_QUERY_LENGTH + " characters"
             );
         }
@@ -122,7 +123,7 @@ public class QueryValidator {
         if (SQL_INJECTION_PATTERN.matcher(sanitized).find()) {
             log.warn("Potential SQL injection detected in query: {}", query);
             return QueryValidationResult.error(
-                WebSocketMessageTypes.ErrorCode.SQL_INJECTION_DETECTED,
+                ErrorCode.SQL_INJECTION_DETECTED,
                 "Query contains potentially malicious patterns"
             );
         }
@@ -141,7 +142,7 @@ public class QueryValidator {
             for (String indexName : queriedIndexes) {
                 if (!authorized.contains(indexName.toLowerCase())) {
                     return QueryValidationResult.error(
-                        WebSocketMessageTypes.ErrorCode.UNAUTHORIZED,
+                        ErrorCode.UNAUTHORIZED,
                         "User is not authorized to query index: " + indexName
                     );
                 }
@@ -315,55 +316,5 @@ public class QueryValidator {
 
     private boolean isIndexReference(String term) {
         return VALID_INDEX_NAME.matcher(term).matches() && term.length() > 0;
-    }
-
-    public static class QueryValidationResult {
-        private final boolean valid;
-        private final List<String> errors;
-        private final String errorCode;
-
-        private QueryValidationResult(boolean valid, List<String> errors, String errorCode) {
-            this.valid = valid;
-            this.errors = errors;
-            this.errorCode = errorCode;
-        }
-
-        public static QueryValidationResult valid() {
-            return new QueryValidationResult(true, List.of(), null);
-        }
-
-        public static QueryValidationResult error(List<String> errors) {
-            return new QueryValidationResult(false, new ArrayList<>(errors), WebSocketMessageTypes.ErrorCode.QUERY_INVALID);
-        }
-
-        public static QueryValidationResult error(String errorCode, String message) {
-            return new QueryValidationResult(false, List.of(message), errorCode);
-        }
-
-        public boolean isValid() {
-            return valid;
-        }
-
-        public List<String> getErrors() {
-            return new ArrayList<>(errors);
-        }
-
-        public String getErrorCode() {
-            return errorCode;
-        }
-
-        public WebSocketMessageTypes.ErrorMessage toErrorMessage(String requestId) {
-            String combinedErrors = String.join("; ", errors);
-            return WebSocketMessageTypes.ErrorMessage.builder()
-                .type("ERROR")
-                .version(WebSocketMessageTypes.VERSION)
-                .requestId(requestId != null ? requestId : "unknown")
-                .timestamp(LocalDateTime.now())
-                .errorCode(errorCode != null ? errorCode : WebSocketMessageTypes.ErrorCode.QUERY_INVALID)
-                .errorMessage(combinedErrors)
-                .severity(WebSocketMessageTypes.ErrorSeverity.ERROR)
-                .context("Query validation")
-                .build();
-        }
     }
 }

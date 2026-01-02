@@ -32,6 +32,7 @@ system:
 
 inputs:
   - name: test_logs
+    type: file
     path: "./test/logs/*.log"
     sourcetype: test
     index: main
@@ -44,7 +45,7 @@ inputs:
 
 outputs:
   - name: grpc_output
-    url: "grpc://localhost:50051"
+    url: "http://localhost:50051"
     token: "test_token"
     api_key: ""
     forwarder_id: "grpc-forwarder-001"

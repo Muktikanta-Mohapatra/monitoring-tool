@@ -2,12 +2,11 @@ package com.monitoring.logforwarder.controller;
 
 import com.monitoring.logforwarder.dto.ApiResponseDTO;
 import com.monitoring.logforwarder.dto.LoginRequestDTO;
-import com.monitoring.logforwarder.dto.LoginResponseDTO;
 import com.monitoring.logforwarder.security.JwtTokenProvider;
 import com.monitoring.logforwarder.service.AuthService;
-import com.monitoring.logforwarder.util.AsyncHelper;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -15,7 +14,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
-import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -63,13 +61,12 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
-    @Autowired
-    private AuthService authService;
+    private final AuthService authService;
 
-    @Autowired
-    private JwtTokenProvider tokenProvider;
+    private final JwtTokenProvider tokenProvider;
 
     /**
      * Authenticates a user and returns JWT tokens.
@@ -82,22 +79,10 @@ public class AuthController {
     @PostMapping("/login")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> login(@Valid @RequestBody LoginRequestDTO loginRequest) {
         return authService.authenticate(loginRequest)
-            .thenApply(response -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Login successful")
-                .code("LOGIN_SUCCESS")
-                .data(response)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Login successful", "LOGIN_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Authentication failed", ex);
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("LOGIN_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "LOGIN_FAILED", HttpStatus.UNAUTHORIZED);
             });
     }
 
@@ -114,33 +99,15 @@ public class AuthController {
         try {
             String refreshToken = token.replace("Bearer ", "");
             return authService.refreshToken(refreshToken)
-                .thenApply(response -> ResponseEntity.ok(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Token refreshed")
-                    .code("TOKEN_REFRESH_SUCCESS")
-                    .data(response)
-                    .timestamp(LocalDateTime.now())
-                    .build()))
+                .thenApply(ApiResponseBuilder.successMapper("Token refreshed", "TOKEN_REFRESH_SUCCESS"))
                 .exceptionally(ex -> {
                     log.error("Token refresh failed", ex);
-                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(ApiResponseDTO.builder()
-                            .success(false)
-                            .message(ex.getMessage())
-                            .code("TOKEN_REFRESH_FAILED")
-                            .timestamp(LocalDateTime.now())
-                            .build());
+                    return ApiResponseBuilder.fromException(ex, "TOKEN_REFRESH_FAILED", HttpStatus.UNAUTHORIZED);
                 });
         } catch (Exception ex) {
             log.error("Token refresh error", ex);
             return CompletableFuture.completedFuture(
-                ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("TOKEN_REFRESH_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build())
+                ApiResponseBuilder.fromException(ex, "TOKEN_REFRESH_FAILED", HttpStatus.UNAUTHORIZED)
             );
         }
     }
@@ -154,26 +121,14 @@ public class AuthController {
      */
     @PostMapping("/logout")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> logout() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authService.logout(null)
             .thenApply(v -> {
                 SecurityContextHolder.clearContext();
-                return ResponseEntity.ok(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Logged out successfully")
-                    .code("LOGOUT_SUCCESS")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+                return ApiResponseBuilder.success("Logged out successfully", "LOGOUT_SUCCESS");
             })
             .exceptionally(ex -> {
                 log.error("Logout failed", ex);
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("LOGOUT_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "LOGOUT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
             });
     }
 
@@ -188,20 +143,8 @@ public class AuthController {
     public ResponseEntity<ApiResponseDTO> getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message("Not authenticated")
-                    .code("NOT_AUTHENTICATED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.unauthorized("Not authenticated", "NOT_AUTHENTICATED");
         }
-        return ResponseEntity.ok(ApiResponseDTO.builder()
-            .success(true)
-            .message("Current user retrieved")
-            .code("GET_USER_SUCCESS")
-            .data(authentication.getName())
-            .timestamp(LocalDateTime.now())
-            .build());
+        return ApiResponseBuilder.success("Current user retrieved", "GET_USER_SUCCESS", authentication.getName());
     }
 }

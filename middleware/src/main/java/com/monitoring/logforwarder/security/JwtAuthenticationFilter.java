@@ -1,7 +1,8 @@
 package com.monitoring.logforwarder.security;
 
+import com.monitoring.logforwarder.util.HttpErrorResponseWriter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -37,13 +38,12 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    @Autowired
-    private JwtTokenProvider tokenProvider;
+    private final JwtTokenProvider tokenProvider;
 
-    @Autowired
-    private CustomUserDetailsService customUserDetailsService;
+    private final CustomUserDetailsService customUserDetailsService;
 
     @Override
     protected boolean shouldNotFilterAsyncDispatch() {
@@ -73,9 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             log.debug("User ID from JWT: {}", userId);
                         } catch (Exception ex) {
                             log.error("CRITICAL: Failed to extract user ID from JWT token. Token may be malformed. Exception: {}", ex.getMessage(), ex);
-                            response.setStatus(401);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"error\": \"Invalid token: cannot extract user ID\"}");
+                            HttpErrorResponseWriter.writeUnauthorized(response, "Invalid token: cannot extract user ID", "INVALID_TOKEN");
                             return;
                         }
 
@@ -91,23 +89,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     log.info("JWT authentication set for user: {} (ID: {})", userDetails.getUsername(), userId);
                                 } else {
                                     log.error("CRITICAL: User not found or disabled for ID: {}", userId);
-                                    response.setStatus(401);
-                                    response.setContentType("application/json");
-                                    response.getWriter().write("{\"error\": \"User not found or disabled\"}");
+                                    HttpErrorResponseWriter.writeUnauthorized(response, "User not found or disabled", "USER_NOT_FOUND");
                                     return;
                                 }
                             } catch (Exception ex) {
                                 log.error("CRITICAL: Exception loading user details from database for user ID: {}. Exception: {}", userId, ex.getMessage(), ex);
-                                response.setStatus(401);
-                                response.setContentType("application/json");
-                                response.getWriter().write("{\"error\": \"Failed to load user details\"}");
+                                HttpErrorResponseWriter.writeUnauthorized(response, "Failed to load user details", "USER_LOAD_FAILED");
                                 return;
                             }
                         } else {
                             log.error("CRITICAL: User ID is null from JWT token");
-                            response.setStatus(401);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"error\": \"Invalid token: user ID is null\"}");
+                            HttpErrorResponseWriter.writeUnauthorized(response, "Invalid token: user ID is null", "INVALID_TOKEN");
                             return;
                         }
                     } else {
@@ -118,9 +110,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             } catch (Exception ex) {
                 log.error("CRITICAL: Unexpected error processing JWT authentication. Exception: {}", ex.getMessage(), ex);
-                response.setStatus(401);
-                response.setContentType("application/json");
-                response.getWriter().write("{\"error\": \"Authentication processing error\"}");
+                HttpErrorResponseWriter.writeUnauthorized(response, "Authentication processing error", "AUTH_ERROR");
                 return;
             }
         }

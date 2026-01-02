@@ -6,8 +6,8 @@ import com.monitoring.logforwarder.entity.AlertRule;
 import com.monitoring.logforwarder.repository.postgresql.AlertRuleRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,12 +17,12 @@ import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AlertRuleEvaluator {
 
-    @Autowired
-    private AlertRuleRepository alertRuleRepository;
+    private final AlertRuleRepository alertRuleRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     public CompletableFuture<List<AlertDTO>> evaluateEventAgainstRules(EventDTO event) {
         return AsyncHelper.executeAsyncFuture(() -> {

@@ -5,8 +5,8 @@ import com.monitoring.logforwarder.entity.Alert;
 import com.monitoring.logforwarder.exception.ResourceNotFoundException;
 import com.monitoring.logforwarder.repository.postgresql.AlertRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,13 +32,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @Transactional(value = "postgresqlTransactionManager")
+@RequiredArgsConstructor
 public class AlertService {
 
-    @Autowired
-    private AlertRepository alertRepository;
+    private final AlertRepository alertRepository;
 
-    @Autowired
-    private NotificationService notificationService;
+    private final NotificationService notificationService;
 
     public CompletableFuture<AlertDTO> triggerAlert(AlertDTO alertDTO) {
         return AsyncHelper.executeAsyncFuture(() -> {

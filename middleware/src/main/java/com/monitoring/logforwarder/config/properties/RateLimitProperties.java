@@ -16,10 +16,4 @@ public class RateLimitProperties {
     private int requestsPerMinute = 1000;
     private int requestsPerHour = 50000;
     private Map<String, EndpointLimit> endpoints = new HashMap<>();
-
-    @Data
-    public static class EndpointLimit {
-        private int perMinute;
-        private int perHour;
-    }
 }

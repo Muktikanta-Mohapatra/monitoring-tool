@@ -1,8 +1,8 @@
 package com.monitoring.logforwarder.repository.clickhouse;
 
 import com.monitoring.logforwarder.util.VirtualThreadExecutor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -13,10 +13,10 @@ import java.util.concurrent.ExecutorService;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class AsyncClickHouseTemplate {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
 
     private final ExecutorService virtualThreadExecutor = VirtualThreadExecutor.getExecutor();
 

@@ -403,6 +403,75 @@ High-performance log collection agent written in Rust for maximum throughput and
 - **Backpressure**: Automatic throttling when downstream is slow
 - **Prometheus Metrics**: Expose metrics on port 9090
 
+#### Running LogForwarder from Command Line
+
+The LogForwarder supports multiple ways to specify the input file and API key:
+
+**Simple Mode (positional arguments):**
+```bash
+high-perf-forwarder <LOG_PATH> <API_KEY>
+
+# Examples:
+high-perf-forwarder ./logs/app.log abc123xyz
+high-perf-forwarder "/var/log/*.log" my-secret-api-key
+```
+
+**Named Arguments:**
+```bash
+high-perf-forwarder --log-path <PATH> --api-key <KEY> [OPTIONS]
+
+# Examples:
+high-perf-forwarder --log-path ./logs --api-key abc123xyz
+high-perf-forwarder -l ./logs -k abc123xyz
+high-perf-forwarder --log-path ./logs --api-key abc123xyz --url http://prod:8080/api/v1/events/batch
+```
+
+**Key=Value Format:**
+```bash
+high-perf-forwarder logfile='<PATH>' api-key=<KEY> [OPTIONS]
+
+# Examples:
+high-perf-forwarder logfile='./logs/app.log' api-key='myapikey123'
+high-perf-forwarder logfile="P:\logs\*.log" api-key="$2a$12$LQv3c..."
+```
+
+**Using Config File:**
+```bash
+high-perf-forwarder --config config/production.yaml
+high-perf-forwarder -c config/inputs.yaml
+```
+
+**Environment Variables:**
+
+You can also set credentials via environment variables (CLI args take precedence):
+
+| Variable | Description |
+|----------|-------------|
+| `FORWARDER_API_KEY` | API key for middleware authentication |
+| `FORWARDER_ID` | Custom forwarder identifier |
+| `MIDDLEWARE_URL` | Middleware endpoint URL |
+| `RUST_LOG` | Log level (trace, debug, info, warn, error) |
+
+```bash
+# Set environment variables
+set FORWARDER_API_KEY=your-api-key-here
+set MIDDLEWARE_URL=http://localhost:8080/api/v1/events/batch
+
+# Run with just the log path
+high-perf-forwarder ./logs
+```
+
+**CLI Options Reference:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--config <FILE>` | `-c` | Path to YAML configuration file |
+| `--log-path <PATH>` | `-l` | Path to log files (supports wildcards) |
+| `--api-key <KEY>` | `-k` | API key for authentication |
+| `--url <URL>` | `-u` | Middleware URL |
+| `--forwarder-id <ID>` | `-i` | Custom forwarder ID |
+| `--help` | `-h` | Print help message |
+
 ---
 
 ### Middleware (Spring Boot API)
@@ -593,6 +662,713 @@ Web-based interface for monitoring and managing Apache Kafka clusters.
 | Tabix | 8124 | HTTP | ClickHouse Web UI |
 | Kafka UI | 8085 | HTTP | Kafka Web UI |
 | Redis Commander | 8086 | HTTP | Redis Web UI |
+
+---
+
+## Technology Deep Dive & Data Flow
+
+This section provides detailed information about each technology used in the system, explaining **why** each technology is used and **how** data flows through it in the architecture.
+
+### Redis Flow
+
+**Purpose**: Redis serves as the distributed caching layer, rate limiter, and session store across all middleware instances.
+
+**Why Redis is Used**:
+1. **Distributed Caching**: Shares cache across multiple middleware instances for consistent data access
+2. **Rate Limiting**: Tracks API request counts per forwarder across all instances accurately
+3. **Session Management**: Maintains user sessions in clustered deployments
+4. **Performance**: Reduces database/Elasticsearch load with sub-millisecond in-memory access
+
+**Code References**:
+- `RedisConfig.java` - Connection and template configuration
+- `CacheConfig.java` - Multi-tier cache managers (lines 82-111, 166-183, 201-212, 230-241)
+- `ForwarderRateLimiter.java` - Rate limiting implementation (lines 60-73)
+
+**Cache Configurations**:
+| Cache Name | TTL | Purpose |
+|------------|-----|---------|
+| searchResults | 30 min | Cached Elasticsearch/ClickHouse query results |
+| metrics | 5 min | Real-time forwarder metrics |
+| forwarders | 15 min | Forwarder configuration data |
+| alertRules | 1 hour | Alert rule definitions |
+| users | 1 hour | User account data |
+| sessionCache | 24 hours | User session data |
+| distributedLocks | 5 min | Distributed locking |
+
+**Flow Diagram (Mermaid)**:
+```mermaid
+flowchart TB
+    subgraph Client["Client Request"]
+        REQ[API Request]
+    end
+
+    subgraph Middleware["Middleware (Spring Boot)"]
+        RL[ForwarderRateLimiter]
+        CM[CacheManager]
+        SVC[Services]
+    end
+
+    subgraph Redis["Redis :6379"]
+        RLK[Rate Limit Keys<br/>rate_limit:forwarder:*]
+        SCH[Search Cache<br/>searchResults:*]
+        MET[Metrics Cache<br/>metrics:*]
+        SES[Session Cache<br/>sessionCache:*]
+    end
+
+    subgraph Databases["Primary Data Stores"]
+        CH[(ClickHouse)]
+        ES[(Elasticsearch)]
+        PG[(PostgreSQL)]
+    end
+
+    REQ --> RL
+    RL -->|Check Rate Limit| RLK
+    RLK -->|Allowed| CM
+    CM -->|Cache Hit| SCH
+    CM -->|Cache Miss| SVC
+    SVC -->|Query| Databases
+    SVC -->|Store Result| SCH
+    SVC -->|Update Metrics| MET
+    CM -->|Return Cached| REQ
+```
+
+**Flow Diagram (ASCII)**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              REDIS DATA FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────┐                                                        │
+│  │   API Request    │                                                        │
+│  └────────┬─────────┘                                                        │
+│           │                                                                  │
+│           ▼                                                                  │
+│  ┌──────────────────┐     ┌──────────────────┐                              │
+│  │ ForwarderRate    │────▶│ Redis Rate Limit │                              │
+│  │ Limiter          │     │ rate_limit:*     │                              │
+│  └────────┬─────────┘     └──────────────────┘                              │
+│           │ Allowed                                                          │
+│           ▼                                                                  │
+│  ┌──────────────────┐     ┌──────────────────┐                              │
+│  │ Cache Manager    │────▶│ Redis Cache      │                              │
+│  │ @Cacheable       │◀────│ searchResults:*  │                              │
+│  └────────┬─────────┘     │ metrics:*        │                              │
+│           │ Cache Miss    │ users:*          │                              │
+│           ▼               └──────────────────┘                              │
+│  ┌──────────────────┐                                                        │
+│  │ ClickHouse/ES/PG │                                                        │
+│  │ (Primary Store)  │                                                        │
+│  └──────────────────┘                                                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Kafka Flow
+
+**Purpose**: Apache Kafka serves as the distributed message queue for asynchronous event processing, ensuring reliable delivery and decoupling between components.
+
+**Why Kafka is Used**:
+1. **Async Processing**: Decouples event ingestion from storage, improving throughput
+2. **Reliability**: Guarantees message delivery with manual offset commits (no data loss)
+3. **Scalability**: Partitioned topics allow parallel processing across consumers
+4. **Audit Trail**: Retains messages for replay and debugging
+
+**Code References**:
+- `KafkaConfig.java` - Topic definitions and producer/consumer configuration (lines 122-203)
+- `EventProducer.java` - Publishing events to topics (lines 46-74, 76-103)
+- `EventConsumer.java` - Consuming and processing messages (lines 65-94, 96-118)
+
+**Kafka Topics**:
+| Topic | Partitions | Retention | Purpose |
+|-------|------------|-----------|---------|
+| events | 12 | 7 days | Log event streaming |
+| alerts | 6 | 30 days | Alert notifications |
+| metrics | 9 | 1 day | Forwarder metrics |
+| audit-logs | 3 | 90 days | Security audit trail |
+| notifications | 6 | 7 days | User notifications |
+
+**Flow Diagram (Mermaid)**:
+```mermaid
+flowchart TB
+    subgraph Ingestion["Event Ingestion"]
+        LF[LogForwarder]
+        API[REST API<br/>/api/v1/events/batch]
+        GRPC[gRPC Server]
+    end
+
+    subgraph Producer["EventProducer"]
+        EP[KafkaTemplate.send]
+    end
+
+    subgraph Kafka["Kafka :9092"]
+        ET[events<br/>12 partitions]
+        AT[alerts<br/>6 partitions]
+        MT[metrics<br/>9 partitions]
+        ALT[audit-logs<br/>3 partitions]
+        NT[notifications<br/>6 partitions]
+    end
+
+    subgraph Consumer["EventConsumer"]
+        EC1[consumeEvent<br/>concurrency=10]
+        EC2[consumeAlert<br/>concurrency=5]
+        EC3[consumeMetrics<br/>concurrency=5]
+        EC4[consumeAuditLog<br/>concurrency=3]
+        EC5[consumeNotification<br/>concurrency=3]
+    end
+
+    subgraph Storage["Persistence"]
+        CH[(ClickHouse)]
+        PG[(PostgreSQL)]
+        NOTIFY[NotificationService]
+    end
+
+    LF -->|HTTP/gRPC| API
+    LF -->|gRPC| GRPC
+    API --> EP
+    GRPC --> EP
+    
+    EP -->|publish| ET
+    EP -->|publish| AT
+    EP -->|publish| MT
+    EP -->|publish| ALT
+    EP -->|publish| NT
+
+    ET --> EC1
+    AT --> EC2
+    MT --> EC3
+    ALT --> EC4
+    NT --> EC5
+
+    EC1 -->|INSERT| CH
+    EC2 -->|INSERT| PG
+    EC3 -->|INSERT| CH
+    EC4 -->|INSERT| PG
+    EC5 --> NOTIFY
+```
+
+**Flow Diagram (ASCII)**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              KAFKA DATA FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                        │
+│  │ LogForwarder│   │  REST API   │   │ gRPC Server │                        │
+│  │   (Rust)    │   │   :8080     │   │   :50051    │                        │
+│  └──────┬──────┘   └──────┬──────┘   └──────┬──────┘                        │
+│         │                 │                 │                                │
+│         └─────────────────┼─────────────────┘                                │
+│                           ▼                                                  │
+│                  ┌─────────────────┐                                         │
+│                  │  EventProducer  │                                         │
+│                  │ kafkaTemplate   │                                         │
+│                  └────────┬────────┘                                         │
+│                           │                                                  │
+│         ┌─────────────────┼─────────────────┐                                │
+│         ▼                 ▼                 ▼                                │
+│  ┌───────────┐     ┌───────────┐     ┌───────────┐                          │
+│  │  events   │     │  alerts   │     │  metrics  │                          │
+│  │(12 parts) │     │(6 parts)  │     │(9 parts)  │                          │
+│  └─────┬─────┘     └─────┬─────┘     └─────┬─────┘                          │
+│        │                 │                 │                                 │
+│        ▼                 ▼                 ▼                                 │
+│  ┌───────────┐     ┌───────────┐     ┌───────────┐                          │
+│  │ Consumer  │     │ Consumer  │     │ Consumer  │                          │
+│  │ @Kafka    │     │ @Kafka    │     │ @Kafka    │                          │
+│  │ Listener  │     │ Listener  │     │ Listener  │                          │
+│  └─────┬─────┘     └─────┬─────┘     └─────┬─────┘                          │
+│        │                 │                 │                                 │
+│        ▼                 ▼                 ▼                                 │
+│  ┌───────────┐     ┌───────────┐     ┌───────────┐                          │
+│  │ ClickHouse│     │ PostgreSQL│     │ ClickHouse│                          │
+│  │  (events) │     │  (alerts) │     │ (metrics) │                          │
+│  └───────────┘     └───────────┘     └───────────┘                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Message Processing Guarantees**:
+- **Manual Acknowledgment**: Offsets only committed after successful database persistence
+- **At-Least-Once Delivery**: Messages are retried on failure
+- **Idempotent Inserts**: Events use unique IDs to prevent duplicates
+
+---
+
+### Elasticsearch Flow
+
+**Purpose**: Elasticsearch provides full-text search capabilities for log content, enabling fast keyword searches across billions of log entries.
+
+**Why Elasticsearch is Used**:
+1. **Full-Text Search**: Inverted index enables sub-second searches across log messages
+2. **Aggregations**: Real-time analytics and faceted search
+3. **Scalability**: Horizontal scaling across nodes for large datasets
+4. **Near Real-Time**: Documents searchable within 1 second of indexing
+
+**Code References**:
+- `ElasticsearchConfig.java` - Client configuration (lines 53-86)
+- `ElasticsearchBulkIndexer.java` - Batch indexing service (lines 107-117, 148-168, 196-205)
+- `SearchService.java` - Search query execution (lines 32-62)
+
+**Indexing Configuration**:
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| Batch Size | 500 events | Optimal bulk indexing size |
+| Flush Timeout | 10 seconds | Time-based flush trigger |
+| Index Pattern | events-YYYY.MM.DD | Daily indices for lifecycle management |
+
+**Flow Diagram (Mermaid)**:
+```mermaid
+flowchart TB
+    subgraph Ingestion["Event Ingestion"]
+        EVC[EventConsumer<br/>Kafka Consumer]
+    end
+
+    subgraph Indexer["ElasticsearchBulkIndexer"]
+        BUF[In-Memory Buffer<br/>List&lt;EventDTO&gt;]
+        BATCH[Batch Processor]
+        FLUSH[Flush Scheduler]
+    end
+
+    subgraph Elasticsearch["Elasticsearch :9200"]
+        IDX[events-*<br/>Daily Indices]
+        INV[Inverted Index<br/>Full-Text Search]
+    end
+
+    subgraph Search["Search Service"]
+        SS[SearchService]
+        QRY[Query Builder]
+        AGG[Aggregations]
+    end
+
+    subgraph Client["UI / API Client"]
+        UI[React Dashboard]
+        SRCH[/api/v1/events/search]
+    end
+
+    EVC -->|addEventForIndexing| BUF
+    BUF -->|size >= 500| BATCH
+    FLUSH -->|10s timeout| BATCH
+    BATCH -->|elasticsearchOperations.save| IDX
+    IDX --> INV
+
+    UI --> SRCH
+    SRCH --> SS
+    SS --> QRY
+    QRY -->|Search| INV
+    QRY --> AGG
+    INV -->|Results| SS
+    SS -->|Cached in Redis| UI
+```
+
+**Flow Diagram (ASCII)**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ELASTICSEARCH DATA FLOW                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     INDEXING FLOW (Write Path)                       │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ EventConsumer │───▶│ BulkIndexer   │───▶│ Elasticsearch │        │    │
+│  │  │ (from Kafka)  │    │ (Buffer 500)  │    │    :9200      │        │    │
+│  │  └───────────────┘    └───────────────┘    └───────────────┘        │    │
+│  │         │                    │                    │                  │    │
+│  │         │                    │ Flush Triggers:    │                  │    │
+│  │         │                    │ • size >= 500      │                  │    │
+│  │         │                    │ • timeout >= 10s   │                  │    │
+│  │                                                                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      SEARCH FLOW (Read Path)                         │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ UI Dashboard  │───▶│ SearchService │───▶│ Elasticsearch │        │    │
+│  │  │ /logs         │    │ @Cacheable    │    │  Full-Text    │        │    │
+│  │  └───────────────┘    └───────────────┘    └───────────────┘        │    │
+│  │         ▲                    │                    │                  │    │
+│  │         │                    ▼                    │                  │    │
+│  │         │             ┌───────────────┐           │                  │    │
+│  │         │◀────────────│ Redis Cache   │◀──────────┘                  │    │
+│  │                       │ searchResults │                              │    │
+│  │                       └───────────────┘                              │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### ClickHouse Flow
+
+**Purpose**: ClickHouse serves as the primary time-series database for high-volume log event storage and analytical queries.
+
+**Why ClickHouse is Used**:
+1. **Column-Oriented**: Optimized for analytical queries on specific columns
+2. **High Ingestion Rate**: Handles millions of events per second
+3. **Compression**: 10-20x compression ratio reduces storage costs
+4. **Time-Series Optimization**: Partitioned by date for efficient time-range queries
+
+**Code References**:
+- `ClickHouseDataSourceConfig.java` - DataSource and connection pooling (lines 56-75)
+- `ClickHouseEventRepository.java` - Event CRUD operations (lines 133-171, 173-214)
+- `EventService.java` - Event processing and persistence (lines 274-350)
+
+**Table Structure**:
+| Table | Engine | Partition | Purpose |
+|-------|--------|-----------|---------|
+| events | MergeTree | YYYYMMDD | Primary log storage |
+| forwarders | ReplacingMergeTree | - | Forwarder status |
+| forwarder_metrics | MergeTree | YYYYMMDD | Time-series metrics |
+
+**Flow Diagram (Mermaid)**:
+```mermaid
+flowchart TB
+    subgraph Ingestion["Event Ingestion"]
+        KFC[EventConsumer<br/>processEventFromKafkaAsync]
+    end
+
+    subgraph Repository["ClickHouseEventRepository"]
+        INS[insertEvent]
+        BATCH[insertEvents<br/>Batch Insert]
+    end
+
+    subgraph ClickHouse["ClickHouse :8123"]
+        EVT[events<br/>MergeTree<br/>PARTITION BY toYYYYMMDD]
+        FWD[forwarders<br/>ReplacingMergeTree]
+        MET[forwarder_metrics<br/>MergeTree]
+    end
+
+    subgraph Query["Query Services"]
+        ES[EventService]
+        SS[SearchService]
+        MS[MetricsService]
+    end
+
+    subgraph Client["API Consumers"]
+        UI[React Dashboard]
+        API[REST API]
+    end
+
+    KFC -->|Event from Kafka| INS
+    INS -->|INSERT| EVT
+    BATCH -->|Batch INSERT| EVT
+
+    UI --> API
+    API --> ES
+    API --> SS
+    API --> MS
+    ES -->|findByTimestampBetween| EVT
+    SS -->|countEventsByTimeRange| EVT
+    MS -->|Metrics Query| MET
+```
+
+**Flow Diagram (ASCII)**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          CLICKHOUSE DATA FLOW                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      WRITE PATH (Event Ingestion)                    │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ Kafka Consumer│───▶│ EventService  │───▶│ ClickHouse    │        │    │
+│  │  │ (events topic)│    │ processEvent  │    │ Repository    │        │    │
+│  │  └───────────────┘    │ FromKafkaAsync│    │ insertEvent() │        │    │
+│  │                       └───────────────┘    └───────┬───────┘        │    │
+│  │                                                    │                 │    │
+│  │                                                    ▼                 │    │
+│  │                                           ┌───────────────┐          │    │
+│  │                                           │    events     │          │    │
+│  │                                           │  (MergeTree)  │          │    │
+│  │                                           │ Partitioned by│          │    │
+│  │                                           │   YYYYMMDD    │          │    │
+│  │                                           └───────────────┘          │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      READ PATH (Query Processing)                    │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ UI/Dashboard  │───▶│ EventService  │───▶│ ClickHouse    │        │    │
+│  │  │  /api/v1/     │    │ SearchService │    │    :8123      │        │    │
+│  │  │  events/      │    │ MetricsService│    │               │        │    │
+│  │  └───────────────┘    └───────────────┘    └───────────────┘        │    │
+│  │                                                                      │    │
+│  │  Query Types:                                                        │    │
+│  │  • findByTimestampBetween(start, end)                               │    │
+│  │  • countEventsByTimeRange(start, end)                               │    │
+│  │  • findBySeverity(severity)                                         │    │
+│  │  • findBySourcetype(sourcetype)                                     │    │
+│  │                                                                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Performance Optimizations**:
+- **Async Template**: Non-blocking database operations via `AsyncClickHouseTemplate`
+- **Connection Pooling**: HikariCP with 10 max connections
+- **Batch Inserts**: Configurable batch size (default: 1000)
+
+---
+
+### PostgreSQL Flow
+
+**Purpose**: PostgreSQL handles all transactional data requiring ACID compliance, including user management, alerts, and audit logs.
+
+**Why PostgreSQL is Used**:
+1. **ACID Compliance**: Guaranteed consistency for critical data
+2. **Relational Integrity**: Foreign keys and constraints for data relationships
+3. **Complex Queries**: JOINs and subqueries for user/alert management
+4. **Mature Ecosystem**: Proven reliability for transactional workloads
+
+**Code References**:
+- `PostgreSQLDataSourceConfig.java` - DataSource configuration (lines 48-67)
+- `AuthService.java` - User authentication (lines 59-114)
+- `AlertService.java` - Alert management (lines 43-65, 67-79)
+- `UserRepository.java` - User data access
+
+**Tables Managed by PostgreSQL**:
+| Table | Purpose | Key Operations |
+|-------|---------|----------------|
+| users | User accounts | Login, CRUD, Role management |
+| alerts | Alert instances | Trigger, Acknowledge, Resolve |
+| alert_rules | Alert definitions | Create, Evaluate, Update |
+| audit_logs | Security audit | Create, Query |
+| forwarder_api_keys | API authentication | Validate, Create |
+| notifications | Notification queue | Send, Track delivery |
+| checkpoints | Forwarder state | Resume after restart |
+
+**Flow Diagram (Mermaid)**:
+```mermaid
+flowchart TB
+    subgraph Auth["Authentication Flow"]
+        LOGIN[/api/v1/auth/login]
+        AS[AuthService]
+        JWT[JwtTokenProvider]
+    end
+
+    subgraph Users["User Management"]
+        UCRUD[UserController]
+        USVC[UserService]
+    end
+
+    subgraph Alerts["Alert Management"]
+        AC[AlertController]
+        ASVC[AlertService]
+        ARE[AlertRuleEvaluator]
+        NS[NotificationService]
+    end
+
+    subgraph PostgreSQL["PostgreSQL :5432"]
+        USR[(users)]
+        ALT[(alerts)]
+        AR[(alert_rules)]
+        AUD[(audit_logs)]
+        FAK[(forwarder_api_keys)]
+        NOT[(notifications)]
+    end
+
+    subgraph Kafka["Kafka Integration"]
+        KP[EventProducer]
+        KC[EventConsumer]
+    end
+
+    LOGIN --> AS
+    AS -->|findByUsername| USR
+    AS --> JWT
+    AS -->|updateLastLogin| USR
+
+    UCRUD --> USVC
+    USVC -->|CRUD| USR
+
+    AC --> ASVC
+    ASVC -->|save| ALT
+    ASVC --> NS
+    NS -->|save| NOT
+    
+    ARE -->|findActiveRules| AR
+    ARE -->|publishAlert| KP
+    KP -->|alerts topic| KC
+    KC -->|processAlertFromKafka| ASVC
+```
+
+**Flow Diagram (ASCII)**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          POSTGRESQL DATA FLOW                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    AUTHENTICATION FLOW                               │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ POST /login   │───▶│  AuthService  │───▶│   users       │        │    │
+│  │  │               │    │               │    │   (table)     │        │    │
+│  │  └───────────────┘    └───────┬───────┘    └───────────────┘        │    │
+│  │                               │                                      │    │
+│  │                               ▼                                      │    │
+│  │                       ┌───────────────┐                              │    │
+│  │                       │JwtTokenProvider│──▶ JWT Token                │    │
+│  │                       └───────────────┘                              │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                       ALERT FLOW                                     │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │ Event from    │───▶│AlertRuleEval- │───▶│  alert_rules  │        │    │
+│  │  │ ClickHouse    │    │ uator         │    │   (table)     │        │    │
+│  │  └───────────────┘    └───────┬───────┘    └───────────────┘        │    │
+│  │                               │ Rule matched                         │    │
+│  │                               ▼                                      │    │
+│  │  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐        │    │
+│  │  │  Kafka alerts │◀───│ AlertService  │───▶│   alerts      │        │    │
+│  │  │    topic      │    │ triggerAlert  │    │   (table)     │        │    │
+│  │  └───────────────┘    └───────┬───────┘    └───────────────┘        │    │
+│  │                               │                                      │    │
+│  │                               ▼                                      │    │
+│  │                       ┌───────────────┐    ┌───────────────┐        │    │
+│  │                       │Notification   │───▶│ notifications │        │    │
+│  │                       │Service        │    │   (table)     │        │    │
+│  │                       └───────────────┘    └───────────────┘        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    TABLES & RELATIONSHIPS                            │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │                                                                      │    │
+│  │  users ──────────┐                                                   │    │
+│  │    │             │                                                   │    │
+│  │    ▼             ▼                                                   │    │
+│  │  audit_logs   forwarder_api_keys                                    │    │
+│  │                                                                      │    │
+│  │  alert_rules ───▶ alerts ───▶ notifications                         │    │
+│  │                                                                      │    │
+│  │  checkpoints (forwarder resume state)                               │    │
+│  │                                                                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Transaction Management**:
+- Separate transaction manager: `postgresqlTransactionManager`
+- Read-only optimization: `@Transactional(readOnly = true)` for queries
+- Isolation level: Default (READ_COMMITTED)
+
+---
+
+### Complete System Data Flow
+
+**End-to-End Event Processing Flow**:
+
+```mermaid
+sequenceDiagram
+    participant LF as LogForwarder (Rust)
+    participant API as Middleware API
+    participant KP as Kafka Producer
+    participant KT as Kafka (events topic)
+    participant KC as Kafka Consumer
+    participant CH as ClickHouse
+    participant ES as Elasticsearch
+    participant RD as Redis
+    participant PG as PostgreSQL
+    participant UI as React Dashboard
+
+    LF->>API: POST /api/v1/events/batch
+    API->>RD: Check Rate Limit
+    RD-->>API: Allowed
+    API->>KP: publishEvent(event)
+    KP->>KT: Send to events topic
+    KT-->>KC: Consume message
+    KC->>CH: insertEvent()
+    KC->>ES: addEventForIndexing()
+    KC->>RD: Update metrics cache
+    KC->>KT: Acknowledge offset
+    
+    Note over KC,PG: Alert Evaluation
+    KC->>PG: Evaluate against alert_rules
+    alt Rule matched
+        KC->>KP: publishAlert()
+        KP->>KT: Send to alerts topic
+    end
+
+    UI->>API: GET /api/v1/events/search
+    API->>RD: Check cache
+    alt Cache miss
+        API->>CH: Query events
+        CH-->>API: Return results
+        API->>RD: Store in cache
+    end
+    API-->>UI: Return events
+```
+
+**ASCII Version**:
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    COMPLETE SYSTEM DATA FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌────────────┐                                                              │
+│  │LogForwarder│                                                              │
+│  │   (Rust)   │                                                              │
+│  └─────┬──────┘                                                              │
+│        │ HTTP POST /api/v1/events/batch                                      │
+│        ▼                                                                     │
+│  ┌────────────┐    ┌────────────┐                                           │
+│  │ Middleware │───▶│   Redis    │ Check Rate Limit                          │
+│  │   :8080    │◀───│   :6379    │                                           │
+│  └─────┬──────┘    └────────────┘                                           │
+│        │                                                                     │
+│        ▼                                                                     │
+│  ┌────────────┐                                                              │
+│  │   Kafka    │◀─── EventProducer.publishEvent()                            │
+│  │   :9092    │                                                              │
+│  │  (events)  │                                                              │
+│  └─────┬──────┘                                                              │
+│        │                                                                     │
+│        ▼                                                                     │
+│  ┌────────────┐                                                              │
+│  │  Kafka     │ EventConsumer.consumeEvent()                                │
+│  │  Consumer  │                                                              │
+│  └─────┬──────┘                                                              │
+│        │                                                                     │
+│        ├─────────────────────┬─────────────────────┐                        │
+│        ▼                     ▼                     ▼                        │
+│  ┌────────────┐       ┌────────────┐       ┌────────────┐                   │
+│  │ ClickHouse │       │Elasticsearch│       │ PostgreSQL │                   │
+│  │   :8123    │       │   :9200    │       │   :5432    │                   │
+│  │  (events)  │       │ (indexing) │       │  (alerts)  │                   │
+│  └────────────┘       └────────────┘       └────────────┘                   │
+│        │                     │                     │                        │
+│        └─────────────────────┴─────────────────────┘                        │
+│                              │                                               │
+│                              ▼                                               │
+│                       ┌────────────┐                                         │
+│                       │   Redis    │ Cache results                           │
+│                       │   :6379    │                                         │
+│                       └─────┬──────┘                                         │
+│                             │                                                │
+│                             ▼                                                │
+│                       ┌────────────┐                                         │
+│                       │    UI      │                                         │
+│                       │   :3000    │                                         │
+│                       └────────────┘                                         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 

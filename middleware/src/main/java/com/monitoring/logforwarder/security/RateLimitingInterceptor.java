@@ -1,7 +1,9 @@
 package com.monitoring.logforwarder.security;
 
+import com.monitoring.logforwarder.config.properties.EndpointLimit;
 import com.monitoring.logforwarder.config.properties.RateLimitProperties;
 import com.monitoring.logforwarder.util.ClientInfoExtractor;
+import com.monitoring.logforwarder.util.HttpErrorResponseWriter;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
@@ -45,9 +47,7 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
             return true;
         } else {
             log.warn("Rate limit exceeded for client: {} on endpoint: {}", clientId, endpoint);
-            response.setStatus(429);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\": \"Rate limit exceeded. Please try again later.\"}");
+            HttpErrorResponseWriter.writeTooManyRequests(response, "Rate limit exceeded. Please try again later.");
             return false;
         }
     }
@@ -58,7 +58,7 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
     }
 
     private Bucket createBucketForEndpoint(String endpoint) {
-        RateLimitProperties.EndpointLimit limits = rateLimitProperties.getEndpoints().get(endpoint);
+        EndpointLimit limits = rateLimitProperties.getEndpoints().get(endpoint);
         int perMinute = limits != null ? limits.getPerMinute() : rateLimitProperties.getRequestsPerMinute();
         int perHour = limits != null ? limits.getPerHour() : rateLimitProperties.getRequestsPerHour();
         
@@ -83,7 +83,7 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
     }
 
     private int getLimit(String endpoint) {
-        RateLimitProperties.EndpointLimit limits = rateLimitProperties.getEndpoints().get(endpoint);
+        EndpointLimit limits = rateLimitProperties.getEndpoints().get(endpoint);
         if (limits != null) {
             return limits.getPerHour();
         }

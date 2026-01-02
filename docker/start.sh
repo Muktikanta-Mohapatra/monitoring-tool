@@ -156,15 +156,16 @@ cmd_fresh() {
         exit 0
     fi
     echo ""
-    print_info "Stopping all services..."
-    docker-compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true
-    docker-compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+    print_info "Stopping all services and removing images..."
+    docker-compose -f docker-compose.yml down -v --rmi all --remove-orphans 2>/dev/null || true
+    docker-compose -f docker-compose.prod.yml down -v --rmi all --remove-orphans 2>/dev/null || true
     
-    print_info "Removing project images..."
+    print_info "Removing any remaining project images..."
     docker images --filter "reference=*logforwarder*" -q | xargs -r docker rmi -f 2>/dev/null || true
+    docker images --filter "reference=*monitoring*" -q | xargs -r docker rmi -f 2>/dev/null || true
     
     print_info "Pruning unused Docker resources..."
-    docker network prune -f 2>/dev/null || true
+    docker system prune -f 2>/dev/null || true
     
     echo ""
     print_info "Starting fresh development environment..."

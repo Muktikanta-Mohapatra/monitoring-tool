@@ -1,13 +1,13 @@
 package com.monitoring.logforwarder.controller;
 
 import com.monitoring.logforwarder.dto.ApiResponseDTO;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
 import com.monitoring.logforwarder.util.AsyncHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -45,22 +45,10 @@ public class ConfigurationController {
         return AsyncHelper.executeAsyncFuture(() -> {
             Map<String, Object> config = new HashMap<>();
             config.put("inputs", new Object[]{});
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Input configurations retrieved")
-                .code("GET_INPUTS_SUCCESS")
-                .data(config)
-                .timestamp(LocalDateTime.now())
-                .build());
+            return ApiResponseBuilder.success("Input configurations retrieved", "GET_INPUTS_SUCCESS", config);
         }).exceptionally(ex -> {
             log.error("Error retrieving input configs", ex);
-            return ResponseEntity.internalServerError()
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("GET_INPUTS_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "GET_INPUTS_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         });
     }
 
@@ -72,23 +60,11 @@ public class ConfigurationController {
      */
     @PostMapping("/inputs")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> createInputConfig(@RequestBody Map<String, Object> config) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Input configuration created")
-                .code("CREATE_INPUT_SUCCESS")
-                .data(config)
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("Input configuration created", "CREATE_INPUT_SUCCESS", config)
+        ).exceptionally(ex -> {
             log.error("Error creating input config", ex);
-            return ResponseEntity.internalServerError()
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("CREATE_INPUT_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "CREATE_INPUT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         });
     }
 
@@ -103,23 +79,11 @@ public class ConfigurationController {
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> updateInputConfig(
             @PathVariable String id,
             @RequestBody Map<String, Object> config) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Input configuration updated")
-                .code("UPDATE_INPUT_SUCCESS")
-                .data(config)
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("Input configuration updated", "UPDATE_INPUT_SUCCESS", config)
+        ).exceptionally(ex -> {
             log.error("Error updating input config", ex);
-            return ResponseEntity.internalServerError()
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("UPDATE_INPUT_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "UPDATE_INPUT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         });
     }
 
@@ -131,22 +95,11 @@ public class ConfigurationController {
      */
     @DeleteMapping("/inputs/{id}")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> deleteInputConfig(@PathVariable String id) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Input configuration deleted")
-                .code("DELETE_INPUT_SUCCESS")
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("Input configuration deleted", "DELETE_INPUT_SUCCESS")
+        ).exceptionally(ex -> {
             log.error("Error deleting input config", ex);
-            return ResponseEntity.internalServerError()
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("DELETE_INPUT_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "DELETE_INPUT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         });
     }
 }

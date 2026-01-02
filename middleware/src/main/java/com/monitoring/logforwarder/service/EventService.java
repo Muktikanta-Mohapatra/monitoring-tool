@@ -10,8 +10,9 @@ import com.monitoring.logforwarder.exception.ValidationException;
 import com.monitoring.logforwarder.kafka.EventProducer;
 import com.monitoring.logforwarder.repository.clickhouse.ClickHouseEventRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -47,43 +48,24 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class EventService {
 
-    @Autowired
-    private ClickHouseEventRepository clickHouseEventRepository;
+    private final ClickHouseEventRepository clickHouseEventRepository;
 
-    @Autowired
+    @Setter
     private ForwarderService forwarderService;
 
-    @Autowired
+    @Setter
     private EventBatchProcessor eventBatchProcessor;
 
-    @Autowired
+    @Setter
     private EventProducer eventProducer;
 
-    @Autowired
+    @Setter
     private AlertRuleEvaluator alertRuleEvaluator;
 
-    @Autowired
-    private EventProcessingMetrics processingMetrics;
-
-
-
-    public void setForwarderService(ForwarderService forwarderService) {
-        this.forwarderService = forwarderService;
-    }
-
-    public void setEventBatchProcessor(EventBatchProcessor eventBatchProcessor) {
-        this.eventBatchProcessor = eventBatchProcessor;
-    }
-
-    public void setEventProducer(EventProducer eventProducer) {
-        this.eventProducer = eventProducer;
-    }
-
-    public void setAlertRuleEvaluator(AlertRuleEvaluator alertRuleEvaluator) {
-        this.alertRuleEvaluator = alertRuleEvaluator;
-    }
+    private final EventProcessingMetrics processingMetrics;
 
     @CacheEvict(value = "searchResults", allEntries = true)
     public EventBatchDTO saveBatch(EventBatchDTO batchDTO) {

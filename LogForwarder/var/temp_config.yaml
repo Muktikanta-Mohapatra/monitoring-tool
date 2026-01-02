@@ -1,0 +1,67 @@
+inputs:
+- type: file
+  name: cli_logs
+  path: P:\Web\demo\generated-logs.log
+  sourcetype: auto
+  index: main
+  recursive: true
+  follow_tail: false
+  encoding: utf-8
+  batch_size: 100
+  read_buffer_kb: 128
+  checkpoint_interval_ms: 5000
+  exclude: null
+outputs:
+- name: http_output
+  url: http://localhost:8080/api/v1/events/batch
+  token: admin123
+  api_key: admin123
+  forwarder_id: forwarder-8dcabf3a-2c5d-4b55-8e4e-a8d7492315bc
+  tls_verify: false
+  batch_size: 50
+  flush_interval_ms: 1000
+  retry_count: 3
+  compression_enabled: false
+  compression_level: 3
+  compression_adaptive: true
+  compression_use_dict: false
+  protocol: http
+indexers: []
+graceful_shutdown: null
+disk_monitoring: null
+system:
+  queue:
+    capacity: 65536
+    max_memory_mb: 50
+  batch:
+    size: 1000
+    max_memory_mb: 10
+    flush_interval_ms: 1000
+  metrics:
+    bind_address: 0.0.0.0
+    port: 9090
+    enabled: true
+  file_watcher:
+    delay_ms: 500
+    enabled: false
+  health_check:
+    interval_secs: 30
+    error_threshold: 10
+  file_input:
+    paused_sleep_ms: 500
+    throttled_sleep_ms: 500
+    normal_sleep_ms: 100
+  config_history_path: var/config_history
+  checkpoint_path: var/checkpoint
+  event_tx_channel_capacity: 10000
+  queue_pop_sleep_ms: 10
+format_detection:
+  enabled: false
+  cache_size: 1000
+  re_evaluation_interval: 100
+  confidence_threshold: 0.8
+  priority_order: []
+parser_fallback:
+  enabled: true
+  when_unknown: store_as_raw
+  sampling_rate: 0.01

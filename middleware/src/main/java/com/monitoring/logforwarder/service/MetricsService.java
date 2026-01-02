@@ -3,8 +3,8 @@ package com.monitoring.logforwarder.service;
 import com.monitoring.logforwarder.dto.ForwarderMetricsDTO;
 import com.monitoring.logforwarder.repository.clickhouse.ClickHouseEventRepository;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,10 +17,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class MetricsService {
 
-    @Autowired
-    private ClickHouseEventRepository eventRepository;
+    private final ClickHouseEventRepository eventRepository;
 
     private final AtomicLong lastEventCount = new AtomicLong(0);
     private final AtomicReference<LocalDateTime> lastCheckTime = new AtomicReference<>(LocalDateTime.now());

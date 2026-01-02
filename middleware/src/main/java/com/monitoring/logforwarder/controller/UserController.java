@@ -2,6 +2,7 @@ package com.monitoring.logforwarder.controller;
 
 import com.monitoring.logforwarder.dto.ApiResponseDTO;
 import com.monitoring.logforwarder.dto.UserDTO;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
 import com.monitoring.logforwarder.util.AsyncHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -9,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,23 +44,11 @@ public class UserController {
     @GetMapping
     @PreAuthorize("hasAuthority('ADMIN')")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getAllUsers() {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Users retrieved")
-                .code("GET_USERS_SUCCESS")
-                .data(new ArrayList<>())
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("Users retrieved", "GET_USERS_SUCCESS", new ArrayList<>())
+        ).exceptionally(ex -> {
             log.error("Error retrieving users", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("GET_USERS_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "GET_USERS_FAILED", HttpStatus.BAD_REQUEST);
         });
     }
 
@@ -73,24 +61,11 @@ public class UserController {
     @PostMapping
     @PreAuthorize("hasAuthority('ADMIN')")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> createUser(@RequestBody UserDTO userDTO) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("User created")
-                    .code("USER_CREATED")
-                    .data(userDTO)
-                    .timestamp(LocalDateTime.now())
-                    .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.created("User created", "USER_CREATED", userDTO)
+        ).exceptionally(ex -> {
             log.error("Error creating user", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("CREATE_USER_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "CREATE_USER_FAILED", HttpStatus.BAD_REQUEST);
         });
     }
 
@@ -102,23 +77,11 @@ public class UserController {
      */
     @GetMapping("/{id}")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getUserById(@PathVariable Long id) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("User retrieved")
-                .code("GET_USER_SUCCESS")
-                .data(new UserDTO())
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("User retrieved", "GET_USER_SUCCESS", new UserDTO())
+        ).exceptionally(ex -> {
             log.error("Error retrieving user", ex);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("USER_NOT_FOUND")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "USER_NOT_FOUND", HttpStatus.NOT_FOUND);
         });
     }
 
@@ -133,23 +96,11 @@ public class UserController {
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> updateUser(
             @PathVariable Long id,
             @RequestBody UserDTO userDTO) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("User updated")
-                .code("USER_UPDATED")
-                .data(userDTO)
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("User updated", "USER_UPDATED", userDTO)
+        ).exceptionally(ex -> {
             log.error("Error updating user", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("UPDATE_USER_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "UPDATE_USER_FAILED", HttpStatus.BAD_REQUEST);
         });
     }
 
@@ -162,22 +113,11 @@ public class UserController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> deleteUser(@PathVariable Long id) {
-        return AsyncHelper.executeAsyncFuture(() -> {
-            return ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("User deleted")
-                .code("USER_DELETED")
-                .timestamp(LocalDateTime.now())
-                .build());
-        }).exceptionally(ex -> {
+        return AsyncHelper.executeAsyncFuture(() -> 
+            ApiResponseBuilder.success("User deleted", "USER_DELETED")
+        ).exceptionally(ex -> {
             log.error("Error deleting user", ex);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("DELETE_USER_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "DELETE_USER_FAILED", HttpStatus.BAD_REQUEST);
         });
     }
 }

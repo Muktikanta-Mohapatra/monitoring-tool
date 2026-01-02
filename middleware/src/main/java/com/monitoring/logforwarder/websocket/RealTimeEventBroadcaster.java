@@ -1,7 +1,7 @@
 package com.monitoring.logforwarder.websocket;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
@@ -9,13 +9,12 @@ import java.util.Set;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class RealTimeEventBroadcaster {
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    @Autowired
-    private EventSubscriptionManager subscriptionManager;
+    private final EventSubscriptionManager subscriptionManager;
 
     public void broadcastEventUpdate(Object eventData, String eventType) {
         WebSocketMessage message = WebSocketMessage.builder()

@@ -4,10 +4,10 @@ import com.monitoring.logforwarder.dto.ApiResponseDTO;
 import com.monitoring.logforwarder.dto.EventBatchDTO;
 import com.monitoring.logforwarder.dto.EventDTO;
 import com.monitoring.logforwarder.service.EventService;
+import com.monitoring.logforwarder.util.ApiResponseBuilder;
 import com.monitoring.logforwarder.util.AsyncHelper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -56,10 +56,10 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/api/v1/events")
 @CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class EventController {
 
-    @Autowired
-    private EventService eventService;
+    private final EventService eventService;
 
     /**
      * Ingests a batch of events from a log forwarder.
@@ -88,25 +88,14 @@ public class EventController {
         
         return AsyncHelper.executeAsyncFuture(() -> {
             eventService.saveBatch(batchDTO);
-            
-            ApiResponseDTO response = ApiResponseDTO.builder()
-                .success(true)
-                .message("Event batch queued for processing with ID: " + batchId)
-                .code("BATCH_QUEUED")
-                .data(batchDTO)
-                .timestamp(LocalDateTime.now())
-                .build();
-            
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+            return ApiResponseBuilder.accepted(
+                "Event batch queued for processing with ID: " + batchId, 
+                "BATCH_QUEUED", 
+                batchDTO
+            );
         }).exceptionally(ex -> {
             log.error("Error ingesting event batch: {}", ex.getMessage(), ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponseDTO.builder()
-                    .success(false)
-                    .message(ex.getMessage())
-                    .code("BATCH_FAILED")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            return ApiResponseBuilder.fromException(ex, "BATCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
         });
     }
 
@@ -143,33 +132,22 @@ public class EventController {
             if (pageSize <= 0 || pageSize > 1000) pageSize = 50;
             
             return eventService.searchEvents(start, end, sourcetype, severity, page, pageSize)
-                .thenApply(results -> ResponseEntity.ok(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Search completed successfully with " + results.getTotalElements() + " total results")
-                    .code("SEARCH_SUCCESS")
-                    .data(results)
-                    .timestamp(LocalDateTime.now())
-                    .build()))
+                .thenApply(results -> ApiResponseBuilder.success(
+                    "Search completed successfully with " + results.getTotalElements() + " total results",
+                    "SEARCH_SUCCESS",
+                    results
+                ))
                 .exceptionally(ex -> {
                     log.error("Error searching events", ex);
-                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(ApiResponseDTO.builder()
-                            .success(false)
-                            .message(ex.getMessage())
-                            .code("SEARCH_FAILED")
-                            .timestamp(LocalDateTime.now())
-                            .build());
+                    return ApiResponseBuilder.fromException(ex, "SEARCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
                 });
         } catch (IllegalArgumentException ex) {
             log.error("Invalid search parameters: {}", ex.getMessage());
             return CompletableFuture.completedFuture(
-                ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message("Invalid date format. Use ISO-8601 format with timezone: yyyy-MM-ddTHH:mm:ss.SSSZ")
-                        .code("INVALID_DATE_FORMAT")
-                        .timestamp(LocalDateTime.now())
-                        .build())
+                ApiResponseBuilder.badRequest(
+                    "Invalid date format. Use ISO-8601 format with timezone: yyyy-MM-ddTHH:mm:ss.SSSZ",
+                    "INVALID_DATE_FORMAT"
+                )
             );
         }
     }
@@ -189,13 +167,7 @@ public class EventController {
             @RequestParam(defaultValue = "1000") Integer limit) {
         if (query == null || query.trim().isEmpty()) {
             return CompletableFuture.completedFuture(
-                ResponseEntity.badRequest()
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message("Search query cannot be empty")
-                        .code("EMPTY_QUERY")
-                        .timestamp(LocalDateTime.now())
-                        .build())
+                ApiResponseBuilder.badRequest("Search query cannot be empty", "EMPTY_QUERY")
             );
         }
 
@@ -208,23 +180,15 @@ public class EventController {
                     .filter(event -> matchesQuery(event, queryLower))
                     .collect(java.util.stream.Collectors.toList());
                 
-                return ResponseEntity.ok(ApiResponseDTO.builder()
-                    .success(true)
-                    .message("Full-text search completed with " + results.size() + " matches")
-                    .code("SEARCH_SUCCESS")
-                    .data(results)
-                    .timestamp(LocalDateTime.now())
-                    .build());
+                return ApiResponseBuilder.success(
+                    "Full-text search completed with " + results.size() + " matches",
+                    "SEARCH_SUCCESS",
+                    results
+                );
             })
             .exceptionally(ex -> {
                 log.error("Error performing full-text search", ex);
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("SEARCH_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "SEARCH_FAILED", HttpStatus.INTERNAL_SERVER_ERROR);
             });
     }
 
@@ -258,22 +222,10 @@ public class EventController {
     @GetMapping("/{eventId}")
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getEventById(@PathVariable Long eventId) {
         return eventService.getEventById(eventId)
-            .thenApply(event -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Event retrieved")
-                .code("GET_EVENT_SUCCESS")
-                .data(event)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Event retrieved", "GET_EVENT_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Error retrieving event", ex);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("EVENT_NOT_FOUND")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "EVENT_NOT_FOUND", HttpStatus.NOT_FOUND);
             });
     }
 
@@ -289,22 +241,10 @@ public class EventController {
     public CompletableFuture<ResponseEntity<ApiResponseDTO>> getRecentEvents(
             @RequestParam(defaultValue = "100") Integer limit) {
         return eventService.getRecentEvents(limit)
-            .thenApply(events -> ResponseEntity.ok(ApiResponseDTO.builder()
-                .success(true)
-                .message("Recent events retrieved")
-                .code("GET_RECENT_SUCCESS")
-                .data(events)
-                .timestamp(LocalDateTime.now())
-                .build()))
+            .thenApply(ApiResponseBuilder.successMapper("Recent events retrieved", "GET_RECENT_SUCCESS"))
             .exceptionally(ex -> {
                 log.error("Error retrieving recent events", ex);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponseDTO.builder()
-                        .success(false)
-                        .message(ex.getMessage())
-                        .code("GET_RECENT_FAILED")
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                return ApiResponseBuilder.fromException(ex, "GET_RECENT_FAILED", HttpStatus.BAD_REQUEST);
             });
     }
 }

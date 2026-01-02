@@ -20,10 +20,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 @EnableAsync
 public class AsyncConfig implements AsyncConfigurer {
 
-    @Value("${app.async-thread-pool-size:16}")
+    @Value("${app.async-thread-pool-size}")
     private int asyncThreadPoolSize;
 
-    @Value("${app.async-queue-size:10000}")
+    @Value("${app.async-queue-size}")
     private int asyncQueueSize;
 
     @Bean(name = "eventProcessingExecutor")
