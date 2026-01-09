@@ -14,6 +14,26 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * MapStruct mapper for converting between Event protobuf messages and DTOs.
+ *
+ * <p><b>Purpose:</b> Converts gRPC protobuf Event messages from LogForwarder agents
+ * into EventDTO objects for processing, storage, and API responses.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Handles protobuf timestamp (nanos) to Java Instant/OffsetDateTime conversion</li>
+ *   <li>Extracts metadata fields (sourceId, hostId, indexId) from protobuf maps</li>
+ *   <li>Converts raw byte data to Base64 strings for JSON serialization</li>
+ *   <li>Spring-managed component via MapStruct componentModel</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see com.forwarder.v1.Event
+ * @see EventDTO
+ */
 @Mapper(componentModel = "spring")
 public interface EventMapper {
 

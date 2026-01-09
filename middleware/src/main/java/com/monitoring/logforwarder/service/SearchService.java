@@ -21,6 +21,25 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+/**
+ * Service for executing log event search queries.
+ *
+ * <p><b>Purpose:</b> Provides search functionality for log events stored in ClickHouse,
+ * including full-text search, filtering, pagination, aggregations, and faceting.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Executes parallel queries for events, aggregations, and facets</li>
+ *   <li>Results cached with key: "query-page" for performance</li>
+ *   <li>Supports time-range filtering, severity, sourcetype, and host filters</li>
+ *   <li>Returns aggregated statistics and faceted navigation options</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ClickHouseEventRepository
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
