@@ -15,6 +15,34 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
+/**
+ * Configuration class for asynchronous task execution infrastructure.
+ *
+ * <p><b>Purpose:</b> Configures multiple thread pool executors for async operations
+ * including event processing, Kafka publishing, scheduled tasks, and virtual threads
+ * for blocking I/O operations.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li><b>eventProcessingExecutor:</b> Core=CPU*2, Max=CPU*4, for event ingestion/processing</li>
+ *   <li><b>kafkaPublishingExecutor:</b> Core=CPU, Max=CPU*2, for Kafka message publishing</li>
+ *   <li><b>taskScheduler:</b> 4 threads for scheduled batch flushes and cleanup tasks</li>
+ *   <li><b>virtualThreadExecutor:</b> Java 21 virtual threads for blocking database/network I/O</li>
+ *   <li>All executors use CallerRunsPolicy for backpressure when queue is full</li>
+ *   <li>Graceful shutdown with configurable termination timeouts</li>
+ * </ul>
+ *
+ * <p><b>Configuration Properties:</b></p>
+ * <ul>
+ *   <li>{@code app.async-thread-pool-size} - Base thread pool size</li>
+ *   <li>{@code app.async-queue-size} - Task queue capacity before rejection</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see org.springframework.scheduling.annotation.AsyncConfigurer
+ */
 @Slf4j
 @Configuration
 @EnableAsync

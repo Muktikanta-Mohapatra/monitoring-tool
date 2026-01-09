@@ -11,6 +11,24 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * Validator for search query syntax and security.
+ *
+ * <p><b>Purpose:</b> Validates search queries for proper syntax, index authorization,
+ * and security threats including SQL injection detection.</p>
+ *
+ * <p><b>Validations:</b></p>
+ * <ul>
+ *   <li>Query length and clause count limits</li>
+ *   <li>Allowed operators and logical operators</li>
+ *   <li>SQL injection pattern detection</li>
+ *   <li>Index access authorization</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 public class QueryValidator {

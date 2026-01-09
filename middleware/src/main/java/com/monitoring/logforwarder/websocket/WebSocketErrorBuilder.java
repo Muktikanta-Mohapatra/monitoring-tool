@@ -3,6 +3,16 @@ package com.monitoring.logforwarder.websocket;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * Builder utility for creating standardized WebSocket error messages.
+ *
+ * <p><b>Purpose:</b> Provides factory methods for creating ErrorMessage objects
+ * with consistent structure for WebSocket error responses.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public final class WebSocketErrorBuilder {
 
     private WebSocketErrorBuilder() {

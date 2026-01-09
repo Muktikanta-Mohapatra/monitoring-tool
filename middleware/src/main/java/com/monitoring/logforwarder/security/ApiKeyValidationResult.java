@@ -2,6 +2,23 @@ package com.monitoring.logforwarder.security;
 
 import com.monitoring.logforwarder.entity.ForwarderApiKey;
 
+/**
+ * Result object for API key validation operations.
+ *
+ * <p><b>Purpose:</b> Encapsulates the outcome of API key validation including
+ * success/failure status, failure reason, and the validated API key entity.</p>
+ *
+ * <p><b>Usage:</b></p>
+ * <ul>
+ *   <li>{@link #valid(ForwarderApiKey)} - Creates successful validation result</li>
+ *   <li>{@link #invalid(String)} - Creates failed validation with reason</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ForwarderAuthFilter
+ */
 public class ApiKeyValidationResult {
     private final boolean valid;
     private final String reason;

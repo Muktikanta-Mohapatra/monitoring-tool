@@ -15,6 +15,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Service for evaluating log events against configured alert rules.
+ *
+ * <p><b>Purpose:</b> Matches incoming events against enabled alert rules and triggers
+ * alerts when conditions are met. Called during event processing after ClickHouse persistence.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Evaluates all enabled rules from AlertRuleRepository</li>
+ *   <li>Supports field matching, regex patterns, and threshold conditions</li>
+ *   <li>Creates AlertDTO for matched rules and publishes to Kafka "alerts" topic</li>
+ *   <li>Called by EventService.processEventFromKafkaAsync()</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see com.monitoring.logforwarder.entity.AlertRule
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

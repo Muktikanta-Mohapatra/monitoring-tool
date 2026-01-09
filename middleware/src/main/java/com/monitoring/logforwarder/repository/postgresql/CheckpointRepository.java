@@ -9,6 +9,16 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA repository for Checkpoint entity operations in PostgreSQL.
+ *
+ * <p><b>Purpose:</b> Stores forwarder file read positions for resumable log tailing
+ * and file rotation detection.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Repository
 public interface CheckpointRepository extends JpaRepository<Checkpoint, Long> {
 

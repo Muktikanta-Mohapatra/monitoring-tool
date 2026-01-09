@@ -8,6 +8,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Service for alert notification delivery across multiple channels.
+ *
+ * <p><b>Purpose:</b> Sends notifications when alerts are triggered, supporting
+ * multiple delivery channels including email, Slack, and webhooks.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Async delivery to prevent blocking alert processing</li>
+ *   <li>Channel selection based on alert rule configuration</li>
+ *   <li>Consumed from Kafka "notifications" topic via EventConsumer</li>
+ *   <li>Supports email, Slack, and webhook integrations</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Service
 public class NotificationService {

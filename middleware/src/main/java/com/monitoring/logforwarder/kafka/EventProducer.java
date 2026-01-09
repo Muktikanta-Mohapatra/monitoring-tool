@@ -15,22 +15,89 @@ import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Kafka producer service for publishing messages to various topics.
+ * Kafka producer service for publishing messages to various Kafka topics.
  *
- * <p><b>Purpose:</b> Handles publishing of events, alerts, metrics, audit logs, and
- * notifications to their respective Kafka topics with async confirmation.</p>
+ * <p><b>PURPOSE:</b></p>
+ * This is the PUBLISHING side of the Kafka messaging pipeline. It provides async,
+ * non-blocking message publishing to Kafka topics for durable, decoupled processing.
+ * All publish methods return CompletableFuture for tracking delivery status.
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>ARCHITECTURE POSITION:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                    EventProducer - KAFKA MESSAGE PUBLISHER                      │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  Publishers                           Kafka Topics                              │
+ * │                                                                                 │
+ * │  EventBatchProcessor.processBatch()                                             │
+ * │          │                                                                      │
+ * │          ▼                                                                      │
+ * │  ┌──────────────────────┐     ┌──────────────┐                                  │
+ * │  │ publishEvent()       │ ──▶ │ "events"     │ ──▶ EventConsumer.consumeEvent() │
+ * │  └──────────────────────┘     └──────────────┘                                  │
+ * │                                                                                 │
+ * │  EventService.publishAlertAsync()                                               │
+ * │          │                                                                      │
+ * │          ▼                                                                      │
+ * │  ┌──────────────────────┐     ┌──────────────┐                                  │
+ * │  │ publishAlert()       │ ──▶ │ "alerts"     │ ──▶ EventConsumer.consumeAlert() │
+ * │  └──────────────────────┘     └──────────────┘                                  │
+ * │                                                                                 │
+ * │  ForwarderService.publishMetrics()                                              │
+ * │          │                                                                      │
+ * │          ▼                                                                      │
+ * │  ┌──────────────────────┐     ┌──────────────┐                                  │
+ * │  │ publishMetrics()     │ ──▶ │ "metrics"    │ ──▶ EventConsumer.consumeMetrics │
+ * │  └──────────────────────┘     └──────────────┘                                  │
+ * │                                                                                 │
+ * │  AuditService.log()                                                             │
+ * │          │                                                                      │
+ * │          ▼                                                                      │
+ * │  ┌──────────────────────┐     ┌──────────────┐                                  │
+ * │  │ publishAuditLog()    │ ──▶ │ "audit-logs" │ ──▶ EventConsumer.consumeAudit   │
+ * │  └──────────────────────┘     └──────────────┘                                  │
+ * │                                                                                 │
+ * │  NotificationService.send()                                                     │
+ * │          │                                                                      │
+ * │          ▼                                                                      │
+ * │  ┌──────────────────────┐     ┌──────────────┐                                  │
+ * │  │ publishNotification()│ ──▶ │"notifications"│ ──▶ EventConsumer.consumeNotif  │
+ * │  └──────────────────────┘     └──────────────┘                                  │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>MESSAGE PARTITIONING:</b></p>
+ * Each publish method sets a Kafka message key for consistent partitioning:
  * <ul>
- *   <li>Publishes to: events, alerts, metrics, audit-logs, notifications</li>
- *   <li>Uses async send with completion callbacks</li>
- *   <li>Sets message keys for partition routing</li>
- *   <li>Returns CompletableFuture for confirmation waiting</li>
+ *   <li><b>events:</b> Key = sourceName (events from same source go to same partition)</li>
+ *   <li><b>alerts:</b> Key = alertId</li>
+ *   <li><b>metrics:</b> Key = forwarderId (metrics from same forwarder stay ordered)</li>
+ *   <li><b>audit-logs:</b> Key = auditLogId</li>
+ *   <li><b>notifications:</b> Key = channel (email, slack, etc.)</li>
+ * </ul>
+ *
+ * <p><b>ASYNC CONFIRMATION:</b></p>
+ * All methods return {@link CompletableFuture} which completes:
+ * <ul>
+ *   <li><b>Successfully:</b> When Kafka broker acknowledges the message</li>
+ *   <li><b>Exceptionally:</b> When send fails (network, serialization, timeout)</li>
+ * </ul>
+ *
+ * <p><b>CALLED BY:</b></p>
+ * <ul>
+ *   <li>{@link com.monitoring.logforwarder.batch.EventBatchProcessor#processBatch} → publishEvent()</li>
+ *   <li>{@link com.monitoring.logforwarder.service.EventService#processEventFromKafkaAsync} → publishAlert()</li>
+ *   <li>{@link com.monitoring.logforwarder.service.ForwarderService} → publishMetrics()</li>
+ *   <li>{@link com.monitoring.logforwarder.service.AuditService} → publishAuditLog()</li>
+ *   <li>{@link com.monitoring.logforwarder.service.NotificationService} → publishNotification()</li>
  * </ul>
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
+ * @see EventConsumer
  * @see KafkaTemplate
  */
 @Slf4j

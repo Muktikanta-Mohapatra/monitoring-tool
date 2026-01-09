@@ -7,6 +7,24 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * Component for broadcasting real-time events to WebSocket subscribers.
+ *
+ * <p><b>Purpose:</b> Sends event updates, alerts, and metrics to connected WebSocket
+ * clients. Supports broadcasting to all subscribers or to specific query subscriptions.</p>
+ *
+ * <p><b>Broadcast Destinations:</b></p>
+ * <ul>
+ *   <li>{@code /topic/events} - All event updates</li>
+ *   <li>{@code /topic/alerts} - Alert notifications</li>
+ *   <li>{@code /topic/metrics} - System metrics updates</li>
+ *   <li>{@code /user/{userId}/queue/results} - User-specific query results</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

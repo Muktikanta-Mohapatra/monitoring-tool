@@ -10,6 +10,26 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+/**
+ * No-operation transaction manager for ClickHouse database.
+ *
+ * <p><b>Purpose:</b> Provides a transaction manager implementation that satisfies Spring's
+ * transaction infrastructure requirements while acknowledging that ClickHouse does not
+ * support traditional ACID transactions.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>All transaction operations are no-ops (begin, commit, rollback do nothing)</li>
+ *   <li>Manages EntityManager lifecycle for proper resource cleanup</li>
+ *   <li>Required by Spring Data JPA even though ClickHouse is non-transactional</li>
+ *   <li>Nested transactions are not allowed</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ClickHouseDataSourceConfig
+ */
 public class ClickHouseNoOpTransactionManager extends AbstractPlatformTransactionManager {
 
     private final EntityManagerFactory entityManagerFactory;

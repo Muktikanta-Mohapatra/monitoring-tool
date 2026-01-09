@@ -11,6 +11,23 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+/**
+ * Async JDBC template wrapper for ClickHouse operations.
+ *
+ * <p><b>Purpose:</b> Wraps JdbcTemplate operations with CompletableFuture for
+ * non-blocking ClickHouse database access using virtual threads.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses VirtualThreadExecutor for blocking JDBC operations</li>
+ *   <li>Returns CompletableFuture for async composition</li>
+ *   <li>Supports query, update, and batch operations</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

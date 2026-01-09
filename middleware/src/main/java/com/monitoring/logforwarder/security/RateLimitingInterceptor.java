@@ -17,6 +17,25 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * HTTP request interceptor for API endpoint rate limiting.
+ *
+ * <p><b>Purpose:</b> Enforces rate limits on REST API endpoints to prevent abuse
+ * and ensure fair resource allocation among clients.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses Bucket4j token bucket algorithm per client IP</li>
+ *   <li>Configurable limits per endpoint pattern via RateLimitProperties</li>
+ *   <li>Returns HTTP 429 Too Many Requests when limit exceeded</li>
+ *   <li>Excludes auth and health check endpoints from rate limiting</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see RateLimitingConfig
+ */
 @Slf4j
 @Component
 public class RateLimitingInterceptor implements HandlerInterceptor {

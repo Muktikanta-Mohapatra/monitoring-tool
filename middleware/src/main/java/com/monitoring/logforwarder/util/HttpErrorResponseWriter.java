@@ -9,6 +9,25 @@ import org.springframework.http.MediaType;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
+/**
+ * Utility class for writing standardized error responses to HTTP responses.
+ *
+ * <p><b>Purpose:</b> Provides static methods for writing JSON error responses
+ * directly to HttpServletResponse, used by security filters that execute
+ * before Spring MVC's exception handling.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #writeUnauthorized} - Write 401 Unauthorized response</li>
+ *   <li>{@link #writeForbidden} - Write 403 Forbidden response</li>
+ *   <li>{@link #writeTooManyRequests} - Write 429 Rate Limited response</li>
+ *   <li>{@link #writeError} - Write custom error response</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public final class HttpErrorResponseWriter {
 
     private static final ObjectMapper objectMapper = createObjectMapper();

@@ -22,35 +22,75 @@ import java.util.concurrent.CompletableFuture;
 /**
  * REST controller for log event management operations.
  *
- * <p><b>Purpose:</b> Handles event ingestion, search, and retrieval operations.
- * Provides endpoints for batch event ingestion from forwarders and event
- * querying for the web dashboard.</p>
+ * <p><b>PURPOSE:</b></p>
+ * This controller serves as the HTTP-based event ingestion endpoint (alternative to gRPC)
+ * and provides search/retrieval APIs for the web dashboard. It handles two primary use cases:
+ * <ol>
+ *   <li><b>Event Ingestion:</b> Receives batched log events from LogForwarder agents via HTTP POST</li>
+ *   <li><b>Event Querying:</b> Provides search and retrieval APIs for the web dashboard</li>
+ * </ol>
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>ARCHITECTURE CONTEXT:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                         HTTP EVENT INGESTION PATH                               │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  LogForwarder (Rust)                                                            │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ outputs/mod.rs:127          │  ←── OutputSender.send_batch_internal()        │
+ * │  │ HTTP POST with JSON payload │                                                │
+ * │  └─────────────┬───────────────┘                                                │
+ * │                │                                                                │
+ * │                ▼                                                                │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ EventController (this class)│  ←── POST /api/v1/events/batch                 │
+ * │  │ ingestEventBatch():74       │                                                │
+ * │  └─────────────┬───────────────┘                                                │
+ * │                │                                                                │
+ * │                ▼                                                                │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ EventService.saveBatch()    │                                                │
+ * │  │ EventService.java:71        │                                                │
+ * │  └─────────────┬───────────────┘                                                │
+ * │                │                                                                │
+ * │                ▼                                                                │
+ * │  EventBatchProcessor → Kafka "events" topic → ClickHouse                        │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>API ENDPOINTS:</b></p>
  * <ul>
- *   <li>Base path: /api/v1/events</li>
- *   <li>Batch endpoint (/batch) is public for forwarder access</li>
- *   <li>Search and retrieval endpoints require authentication</li>
- *   <li>Supports time-range filtering, sourcetype, and severity filters</li>
+ *   <li>{@code POST /api/v1/events/batch} - Batch event ingestion (public, uses X-API-KEY)</li>
+ *   <li>{@code GET /api/v1/events/search} - Search events with filters</li>
+ *   <li>{@code GET /api/v1/events/search/fulltext} - Full-text search across events</li>
+ *   <li>{@code GET /api/v1/events/{eventId}} - Retrieve single event by ID</li>
+ *   <li>{@code GET /api/v1/events/recent} - Get most recent events</li>
  * </ul>
  *
- * <p><b>Example:</b></p>
- * <pre>{@code
- * // Batch ingestion
- * POST /api/v1/events/batch
- * {
- *   "forwarderId": "fwd-001",
- *   "events": [{"rawMessage": "Log entry", "severity": "INFO"}]
- * }
+ * <p><b>AUTHENTICATION:</b></p>
+ * <ul>
+ *   <li><b>/batch:</b> Authenticated via X-API-KEY header (see {@link com.monitoring.logforwarder.security.ForwarderAuthFilter})</li>
+ *   <li><b>Other endpoints:</b> Require JWT Bearer token authentication</li>
+ * </ul>
  *
- * // Search events
- * GET /api/v1/events/search?startTime=2024-01-01T00:00:00&severity=ERROR
- * }</pre>
+ * <p><b>COMPARISON: HTTP vs gRPC INGESTION:</b></p>
+ * <table border="1">
+ *   <tr><th>Aspect</th><th>HTTP (this controller)</th><th>gRPC (ForwarderGrpcService)</th></tr>
+ *   <tr><td>Protocol</td><td>HTTP/1.1 or HTTP/2</td><td>HTTP/2 (required)</td></tr>
+ *   <tr><td>Payload</td><td>JSON</td><td>Protobuf (binary)</td></tr>
+ *   <tr><td>Streaming</td><td>Request/Response</td><td>Bidirectional streaming</td></tr>
+ *   <tr><td>Efficiency</td><td>Lower (text parsing)</td><td>Higher (binary, streaming)</td></tr>
+ *   <tr><td>Compression</td><td>Optional (zstd header)</td><td>Built-in</td></tr>
+ * </table>
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
  * @see EventService
+ * @see com.monitoring.logforwarder.grpc.ForwarderGrpcService
+ * @see com.monitoring.logforwarder.security.ForwarderAuthFilter
  */
 @Slf4j
 @RestController
@@ -62,12 +102,53 @@ public class EventController {
     private final EventService eventService;
 
     /**
-     * Ingests a batch of events from a log forwarder.
+     * Ingests a batch of events from a log forwarder via HTTP POST.
      *
-     * <p><b>Purpose:</b> Receives and processes batched log events from forwarders for storage and analysis.</p>
+     * <p><b>PURPOSE:</b></p>
+     * This is the PRIMARY HTTP endpoint for log event ingestion. LogForwarder agents configured
+     * with {@code protocol: "http"} send batched events here. This endpoint is an alternative
+     * to the gRPC streaming endpoint ({@link com.monitoring.logforwarder.grpc.ForwarderGrpcService#sendEvents}).
      *
-     * @param batchDTO the batch of events to ingest
-     * @return processed batch confirmation or error details
+     * <p><b>REQUEST FORMAT:</b></p>
+     * <pre>
+     * POST /api/v1/events/batch
+     * Content-Type: application/json
+     * X-API-KEY: &lt;forwarder-api-key&gt;
+     * Content-Encoding: zstd (optional, if compressed)
+     *
+     * {
+     *   "forwarderId": "fwd-001",
+     *   "apiKey": "xxx",
+     *   "events": [
+     *     {
+     *       "timestamp": "2024-01-01T00:00:00Z",
+     *       "rawData": "Log message content",
+     *       "sourcetype": "syslog",
+     *       "severity": "INFO",
+     *       "parsedFields": {"key": "value"},
+     *       "enrichedFields": {"geo": "US"}
+     *     }
+     *   ]
+     * }
+     * </pre>
+     *
+     * <p><b>PROCESSING FLOW:</b></p>
+     * <ol>
+     *   <li>Request authenticated via {@link com.monitoring.logforwarder.security.ForwarderAuthFilter}</li>
+     *   <li>Batch assigned a unique UUID (batchId)</li>
+     *   <li>{@link EventService#saveBatch} queues events to {@link com.monitoring.logforwarder.batch.EventBatchProcessor}</li>
+     *   <li>Events published to Kafka "events" topic asynchronously</li>
+     *   <li>HTTP 202 Accepted returned immediately (async processing)</li>
+     * </ol>
+     *
+     * <p><b>CALLED BY:</b></p>
+     * <ul>
+     *   <li>{@code logforwarder/src/outputs/mod.rs:127} - OutputSender.send_batch_internal()</li>
+     *   <li>External log shipping tools configured to use HTTP</li>
+     * </ul>
+     *
+     * @param batchDTO the batch of events to ingest (validated for non-null events)
+     * @return HTTP 202 Accepted with batch ID, or error response
      */
     private static volatile int batchSequence = 0;
     

@@ -1,5 +1,16 @@
 package com.monitoring.logforwarder.util;
 
+/**
+ * Application-wide constants and configuration values.
+ *
+ * <p><b>Purpose:</b> Centralizes constant values used across the application
+ * including API paths, pagination defaults, date formats, Elasticsearch indices,
+ * Redis keys, and status values.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class Constants {
 
     public static final String API_VERSION = "v1";

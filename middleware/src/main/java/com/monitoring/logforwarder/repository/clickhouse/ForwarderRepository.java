@@ -12,6 +12,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Repository for Forwarder entity operations in ClickHouse.
+ *
+ * <p><b>Purpose:</b> Provides async CRUD operations for forwarder records
+ * including status updates and heartbeat tracking.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Repository
 @RequiredArgsConstructor

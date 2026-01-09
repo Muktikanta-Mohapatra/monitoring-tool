@@ -5,6 +5,24 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
+/**
+ * Utility class for date/time formatting and conversion operations.
+ *
+ * <p><b>Purpose:</b> Provides standardized date/time formatting using UTC timezone
+ * and ISO-8601 patterns, plus conversion utilities between date types.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #formatTimestamp} - Format LocalDateTime to ISO timestamp string</li>
+ *   <li>{@link #parseTimestamp} - Parse ISO timestamp string to LocalDateTime</li>
+ *   <li>{@link #toInstant} - Convert LocalDateTime to Instant</li>
+ *   <li>{@link #now} - Get current UTC time</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class DateFormatUtil {
 
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = 

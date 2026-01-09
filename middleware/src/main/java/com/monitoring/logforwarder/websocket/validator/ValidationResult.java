@@ -6,6 +6,16 @@ import com.monitoring.logforwarder.websocket.WebSocketErrorBuilder;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Result object for WebSocket message validation.
+ *
+ * <p><b>Purpose:</b> Encapsulates validation outcome with validity flag,
+ * error messages, and request ID for response correlation.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class ValidationResult {
     private final boolean valid;
     private final List<String> errors;

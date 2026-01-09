@@ -5,6 +5,24 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Singleton provider for Java 21 virtual thread executor.
+ *
+ * <p><b>Purpose:</b> Provides a shared virtual thread executor for running blocking
+ * I/O operations (database queries, HTTP calls) without blocking platform threads.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses {@link Executors#newVirtualThreadPerTaskExecutor()}</li>
+ *   <li>Automatically creates lightweight virtual threads per task</li>
+ *   <li>Registers JVM shutdown hook for graceful termination</li>
+ *   <li>Ideal for blocking operations that would starve traditional thread pools</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 public class VirtualThreadExecutor {
 

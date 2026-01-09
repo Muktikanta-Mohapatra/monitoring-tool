@@ -9,6 +9,23 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
+/**
+ * Component for accessing configured async executors from Spring context.
+ *
+ * <p><b>Purpose:</b> Provides programmatic access to the various thread pool executors
+ * configured in AsyncConfig, enabling async task execution with specific executors.</p>
+ *
+ * <p><b>Available Executors:</b></p>
+ * <ul>
+ *   <li>{@code eventProcessingExecutor} - For event ingestion/processing tasks</li>
+ *   <li>{@code kafkaPublishingExecutor} - For Kafka message publishing</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see com.monitoring.logforwarder.config.AsyncConfig
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

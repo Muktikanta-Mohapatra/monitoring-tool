@@ -9,6 +9,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Message object for WebSocket ad-hoc query requests.
+ *
+ * <p><b>Purpose:</b> Represents a search query request from a WebSocket client
+ * with query text, pagination, and result configuration.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Data
 @Builder
 @NoArgsConstructor

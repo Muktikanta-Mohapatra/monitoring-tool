@@ -12,6 +12,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Repository for forwarder metrics storage in ClickHouse.
+ *
+ * <p><b>Purpose:</b> Provides async operations for storing and querying
+ * forwarder performance metrics (CPU, memory, throughput).</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Repository
 @RequiredArgsConstructor

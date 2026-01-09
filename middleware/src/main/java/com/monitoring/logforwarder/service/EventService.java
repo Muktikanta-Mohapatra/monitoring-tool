@@ -30,21 +30,90 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
- * Service for log event management operations.
+ * Core service for log event lifecycle management - the central hub of event processing.
  *
- * <p><b>Purpose:</b> Handles event lifecycle including batch ingestion, searching,
- * indexing, and processing from Kafka.</p>
+ * <p><b>PURPOSE:</b></p>
+ * This is the CENTRAL SERVICE for all event operations in the middleware. It serves as the
+ * coordination point between ingestion endpoints, batch processing, Kafka messaging,
+ * database persistence, and alert evaluation.
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>ARCHITECTURE POSITION:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                    EventService - CENTRAL EVENT HUB                             │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  INGESTION SOURCES                          EVENT SERVICE                       │
+ * │  ┌─────────────────────┐                   ┌─────────────────┐                 │
+ * │  │ ForwarderGrpcService│ ─persistEvent()─▶ │                 │                 │
+ * │  │ (gRPC ingestion)    │                   │                 │                 │
+ * │  └─────────────────────┘                   │                 │                 │
+ * │                                            │  EventService   │                 │
+ * │  ┌─────────────────────┐                   │  (this class)   │                 │
+ * │  │ EventController     │ ──saveBatch()───▶ │                 │                 │
+ * │  │ (HTTP ingestion)    │                   │                 │                 │
+ * │  └─────────────────────┘                   └────────┬────────┘                 │
+ * │                                                     │                          │
+ * │                                    ┌────────────────┼────────────────┐         │
+ * │                                    ▼                ▼                ▼         │
+ * │                          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+ * │                          │EventBatch    │  │ForwarderSvc  │  │Processing    │  │
+ * │                          │Processor     │  │(metrics)     │  │Metrics       │  │
+ * │                          └──────┬───────┘  └──────────────┘  └──────────────┘  │
+ * │                                 │                                              │
+ * │                                 ▼                                              │
+ * │                          ┌──────────────┐                                      │
+ * │                          │ EventProducer│ ──▶ Kafka "events" topic             │
+ * │                          └──────────────┘                                      │
+ * │                                                     │                          │
+ * │  ┌─────────────────────┐                           │                          │
+ * │  │ EventConsumer       │ ◀─────────────────────────┘                          │
+ * │  │ (Kafka listener)    │                                                       │
+ * │  └─────────┬───────────┘                                                       │
+ * │            │                                                                   │
+ * │            ▼                                                                   │
+ * │  processEventFromKafkaAsync() ──▶ ClickHouse INSERT                           │
+ * │            │                                                                   │
+ * │            ▼                                                                   │
+ * │  AlertRuleEvaluator ──▶ (if match) ──▶ Kafka "alerts" topic                   │
+ * │                                                                                │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>KEY METHODS AND THEIR CALLERS:</b></p>
+ * <table border="1">
+ *   <tr><th>Method</th><th>Called By</th><th>Purpose</th></tr>
+ *   <tr><td>{@link #saveBatch}</td><td>EventController.ingestEventBatch()</td><td>HTTP batch ingestion</td></tr>
+ *   <tr><td>{@link #persistEvent}</td><td>ForwarderGrpcService.processEventBatchAsync()</td><td>gRPC batch ingestion</td></tr>
+ *   <tr><td>{@link #processEventFromKafkaAsync}</td><td>EventConsumer.consumeEvent()</td><td>Kafka→ClickHouse persistence</td></tr>
+ *   <tr><td>{@link #searchEvents}</td><td>EventController.searchEvents()</td><td>Dashboard search</td></tr>
+ *   <tr><td>{@link #getRecentEvents}</td><td>EventController, DashboardController</td><td>Recent events display</td></tr>
+ * </table>
+ *
+ * <p><b>DATA FLOW PATHS:</b></p>
+ * <ol>
+ *   <li><b>HTTP Path:</b> EventController → saveBatch() → EventBatchProcessor → Kafka → processEventFromKafkaAsync() → ClickHouse</li>
+ *   <li><b>gRPC Path:</b> ForwarderGrpcService → persistEvent() → EventBatchProcessor → Kafka → processEventFromKafkaAsync() → ClickHouse</li>
+ *   <li><b>Query Path:</b> EventController → searchEvents() → ClickHouseEventRepository → Response</li>
+ * </ol>
+ *
+ * <p><b>CACHING:</b></p>
  * <ul>
- *   <li>Caching for search results</li>
- *   <li>Transaction management for data consistency</li>
- *   <li>Integration with ForwarderService for metrics</li>
+ *   <li>{@link #searchEvents} results are cached with key: "page-pageSize"</li>
+ *   <li>{@link #saveBatch} evicts all cached search results (data changed)</li>
  * </ul>
+ *
+ * <p><b>DEPENDENCY INJECTION NOTES:</b></p>
+ * Some dependencies use {@code @Setter} injection instead of constructor injection to avoid
+ * circular dependency issues with Spring (e.g., ForwarderService, EventBatchProcessor).
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
+ * @see com.monitoring.logforwarder.batch.EventBatchProcessor
+ * @see com.monitoring.logforwarder.kafka.EventProducer
+ * @see com.monitoring.logforwarder.kafka.EventConsumer
+ * @see com.monitoring.logforwarder.repository.clickhouse.ClickHouseEventRepository
  */
 @Slf4j
 @Service
@@ -65,8 +134,49 @@ public class EventService {
     @Setter
     private AlertRuleEvaluator alertRuleEvaluator;
 
+    /**
+     * Metrics collector for tracking event processing performance and throughput.
+     * Records ingestion, persistence, failures, and Kafka publish/consume counts.
+     */
     private final EventProcessingMetrics processingMetrics;
 
+    /**
+     * Saves a batch of events received via HTTP POST from LogForwarder agents.
+     *
+     * <p><b>PURPOSE:</b></p>
+     * This is the PRIMARY entry point for HTTP-based event ingestion. It receives batched
+     * events from {@link com.monitoring.logforwarder.controller.EventController#ingestEventBatch}
+     * and queues them for async processing via Kafka.
+     *
+     * <p><b>PROCESSING FLOW:</b></p>
+     * <pre>
+     * saveBatch()
+     *     │
+     *     ├── Validate batch not empty
+     *     │
+     *     ├── For each event:
+     *     │       ├── Record ingestion metric
+     *     │       └── Generate event ID if missing
+     *     │
+     *     ├── eventBatchProcessor.addEvents() ──▶ Queue for Kafka
+     *     │
+     *     ├── forwarderService.updateForwarderMetrics() ──▶ Update forwarder stats
+     *     │
+     *     └── Return batchDTO with batch size
+     * </pre>
+     *
+     * <p><b>CACHING BEHAVIOR:</b></p>
+     * Annotated with {@code @CacheEvict(value = "searchResults", allEntries = true)}
+     * to invalidate all cached search results when new events are ingested.
+     *
+     * <p><b>CALLED BY:</b></p>
+     * {@link com.monitoring.logforwarder.controller.EventController#ingestEventBatch} (line 90)
+     *
+     * @param batchDTO the batch of events to save (must have non-null, non-empty events list)
+     * @return the input batchDTO with batchSize populated
+     * @throws ValidationException if events list is null or empty
+     * @throws DataAccessException if batch processing fails
+     */
     @CacheEvict(value = "searchResults", allEntries = true)
     public EventBatchDTO saveBatch(EventBatchDTO batchDTO) {
         if (batchDTO.getEvents() == null || batchDTO.getEvents().isEmpty()) {
@@ -215,6 +325,40 @@ public class EventService {
             });
     }
 
+    /**
+     * Persists an event received via gRPC from LogForwarder agents.
+     *
+     * <p><b>PURPOSE:</b></p>
+     * This is the PRIMARY entry point for gRPC-based event ingestion. It receives protobuf
+     * Event messages from {@link com.monitoring.logforwarder.grpc.ForwarderGrpcService#sendEvents}
+     * and converts them to EventDTO for batch processing.
+     *
+     * <p><b>PROCESSING FLOW:</b></p>
+     * <pre>
+     * persistEvent(protoEvent)
+     *     │
+     *     ├── Convert protobuf Event to EventDTO
+     *     │       ├── Extract rawData (bytes → String)
+     *     │       ├── Extract metadata (sourceName, severity, forwarderId)
+     *     │       └── Set timestamp to current UTC time
+     *     │
+     *     └── eventBatchProcessor.addEvent() ──▶ Queue for Kafka
+     * </pre>
+     *
+     * <p><b>CALLED BY:</b></p>
+     * {@link com.monitoring.logforwarder.grpc.ForwarderGrpcService} processEventBatchAsync() (line 82)
+     *
+     * <p><b>PROTO TO DTO MAPPING:</b></p>
+     * <ul>
+     *   <li>protoEvent.getRawData() → eventDTO.rawData (bytes to UTF-8 string)</li>
+     *   <li>protoEvent.getSourceName() → eventDTO.sourceName</li>
+     *   <li>protoEvent.getSeverity() → eventDTO.severity</li>
+     *   <li>protoEvent.getForwarderId() → eventDTO.forwarderId</li>
+     * </ul>
+     *
+     * @param protoEvent the protobuf Event message from gRPC stream
+     * @throws DataAccessException if event cannot be queued for processing
+     */
     public void persistEvent(com.forwarder.v1.Event protoEvent) {
         try {
             log.debug("Persisting proto event from forwarder: {}", protoEvent.getForwarderId());
@@ -253,6 +397,53 @@ public class EventService {
         });
     }
 
+    /**
+     * Processes an event consumed from Kafka and persists it to ClickHouse database.
+     *
+     * <p><b>PURPOSE:</b></p>
+     * This is the FINAL PERSISTENCE STEP in the event pipeline. Events consumed from
+     * the Kafka "events" topic by {@link com.monitoring.logforwarder.kafka.EventConsumer}
+     * are passed here for database insertion and alert evaluation.
+     *
+     * <p><b>ARCHITECTURE POSITION:</b></p>
+     * <pre>
+     * Kafka "events" topic
+     *         │
+     *         ▼
+     * EventConsumer.consumeEvent() (line 66)
+     *         │
+     *         ▼
+     * processEventFromKafkaAsync() (this method)
+     *         │
+     *         ├── Convert EventDTO to Event entity
+     *         │
+     *         ├── ClickHouseEventRepository.insertEvent()
+     *         │         │
+     *         │         └── ClickHouse INSERT
+     *         │
+     *         └── AlertRuleEvaluator.evaluateEventAgainstRules()
+     *                   │
+     *                   └── (if match) → EventProducer.publishAlert()
+     * </pre>
+     *
+     * <p><b>KAFKA OFFSET HANDLING:</b></p>
+     * This method is called with manual acknowledgment. The offset is only committed
+     * by EventConsumer AFTER this method completes successfully. If this method throws,
+     * the message will be reprocessed (at-least-once semantics).
+     *
+     * <p><b>ERROR HANDLING:</b></p>
+     * <ul>
+     *   <li>Null eventDTO → Returns failed future with ValidationException</li>
+     *   <li>ClickHouse insert fails → Returns failed future with DataAccessException</li>
+     *   <li>Alert evaluation fails → Logged but doesn't fail the event persistence</li>
+     * </ul>
+     *
+     * <p><b>CALLED BY:</b></p>
+     * {@link com.monitoring.logforwarder.kafka.EventConsumer#consumeEvent} (line 74)
+     *
+     * @param eventDTO the event to persist (consumed from Kafka)
+     * @return CompletableFuture that completes when event is persisted and alerts evaluated
+     */
     public CompletableFuture<Void> processEventFromKafkaAsync(EventDTO eventDTO) {
         processingMetrics.recordEventConsumedFromKafka();
         log.info("CRITICAL: Processing event from Kafka async - ID: {}, Forwarder: {}", 

@@ -1,5 +1,15 @@
 package com.monitoring.logforwarder.websocket;
 
+/**
+ * Constants for WebSocket error codes.
+ *
+ * <p><b>Purpose:</b> Defines standardized error codes for WebSocket
+ * error responses enabling client-side error handling.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class ErrorCode {
     public static final String VALIDATION_FAILED = "VALIDATION_FAILED";
     public static final String QUERY_INVALID = "QUERY_INVALID";

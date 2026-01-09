@@ -10,6 +10,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA repository for User entity operations in PostgreSQL.
+ *
+ * <p><b>Purpose:</b> Provides CRUD and query operations for user accounts including
+ * lookup by username/email, role filtering, and account status queries.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 

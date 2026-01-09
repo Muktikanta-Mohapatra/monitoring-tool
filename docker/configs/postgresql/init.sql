@@ -21,19 +21,10 @@
 -- =============================================================================
 
 -- =============================================================================
--- CREATE APPLICATION USER AND DATABASE
+-- NOTE: Database and user are created automatically by Docker via environment
+-- variables: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+-- This script runs connected to the POSTGRES_DB database automatically.
 -- =============================================================================
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'logforwarder') THEN
-        CREATE USER logforwarder WITH PASSWORD 'logforwarder';
-    END IF;
-END
-$$;
-
-CREATE DATABASE logforwarder OWNER logforwarder;
-
-\connect logforwarder
 
 SET search_path TO public;
 

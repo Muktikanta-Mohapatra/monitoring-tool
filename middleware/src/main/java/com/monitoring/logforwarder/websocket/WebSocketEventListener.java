@@ -10,6 +10,24 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 import org.springframework.web.socket.messaging.SessionUnsubscribeEvent;
 
+/**
+ * Event listener for WebSocket session lifecycle events.
+ *
+ * <p><b>Purpose:</b> Handles WebSocket connection and disconnection events
+ * to manage subscription cleanup and connection logging.</p>
+ *
+ * <p><b>Handled Events:</b></p>
+ * <ul>
+ *   <li>{@link SessionConnectedEvent} - Log new connection</li>
+ *   <li>{@link SessionDisconnectEvent} - Cleanup subscriptions on disconnect</li>
+ *   <li>{@link SessionSubscribeEvent} - Log subscription</li>
+ *   <li>{@link SessionUnsubscribeEvent} - Log unsubscription</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

@@ -11,6 +11,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Validator for WebSocket message structure and content.
+ *
+ * <p><b>Purpose:</b> Validates incoming WebSocket messages for proper format,
+ * required fields, and value constraints before processing.</p>
+ *
+ * <p><b>Validated Constraints:</b></p>
+ * <ul>
+ *   <li>Query length: max 10,000 characters</li>
+ *   <li>Fields count: max 100</li>
+ *   <li>Batch size: 1-10,000</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 public class WebSocketMessageValidator {

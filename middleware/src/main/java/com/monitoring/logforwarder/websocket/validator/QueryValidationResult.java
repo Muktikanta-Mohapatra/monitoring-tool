@@ -8,6 +8,16 @@ import com.monitoring.logforwarder.websocket.WebSocketErrorBuilder;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Result object for query validation.
+ *
+ * <p><b>Purpose:</b> Encapsulates query validation outcome with validity flag,
+ * error messages, and error code for client handling.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class QueryValidationResult {
     private final boolean valid;
     private final List<String> errors;

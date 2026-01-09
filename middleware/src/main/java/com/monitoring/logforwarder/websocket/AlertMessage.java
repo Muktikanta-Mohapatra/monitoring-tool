@@ -8,6 +8,16 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * Message object for WebSocket alert notifications.
+ *
+ * <p><b>Purpose:</b> Represents an alert notification broadcast to WebSocket clients
+ * including alert details, severity, status, and trigger information.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Data
 @Builder
 @NoArgsConstructor

@@ -16,21 +16,65 @@ import java.util.concurrent.CompletableFuture;
 /**
  * REST controller for log forwarder management.
  *
- * <p><b>Purpose:</b> Manages log forwarder registration, status updates,
- * heartbeat monitoring, and metrics retrieval.</p>
+ * <p><b>PURPOSE:</b></p>
+ * Manages the lifecycle of LogForwarder agents including registration, status tracking,
+ * heartbeat monitoring, and metrics retrieval. This controller provides visibility into
+ * the fleet of log forwarding agents connected to the middleware.
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>ARCHITECTURE CONTEXT:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                       FORWARDER MANAGEMENT FLOW                                 │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  LogForwarder Agent (Rust)                                                      │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ On startup:                 │                                                │
+ * │  │   POST /forwarders          │ ──▶ Register with middleware                   │
+ * │  │                             │                                                │
+ * │  │ Every 30 seconds:           │                                                │
+ * │  │   POST /forwarders/{id}/    │ ──▶ Send heartbeat (keep-alive)                │
+ * │  │        heartbeat            │                                                │
+ * │  └─────────────────────────────┘                                                │
+ * │                                                                                 │
+ * │  Web Dashboard                                                                  │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ GET /forwarders             │ ──▶ List all forwarders                        │
+ * │  │ GET /forwarders/{id}        │ ──▶ Get forwarder details                      │
+ * │  │ GET /forwarders/{id}/metrics│ ──▶ Get forwarder performance metrics          │
+ * │  └─────────────────────────────┘                                                │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>FORWARDER STATES:</b></p>
  * <ul>
- *   <li>Base path: /api/v1/forwarders</li>
- *   <li>Supports forwarder registration and discovery</li>
- *   <li>Heartbeat endpoint for health monitoring</li>
- *   <li>Per-forwarder metrics retrieval</li>
+ *   <li><b>ACTIVE:</b> Heartbeat received within last 60 seconds</li>
+ *   <li><b>INACTIVE:</b> No heartbeat for 60+ seconds</li>
+ *   <li><b>OFFLINE:</b> No heartbeat for 5+ minutes (considered down)</li>
+ * </ul>
+ *
+ * <p><b>API ENDPOINTS:</b></p>
+ * <ul>
+ *   <li>{@code GET /api/v1/forwarders} - List all registered forwarders</li>
+ *   <li>{@code GET /api/v1/forwarders/{id}} - Get specific forwarder details</li>
+ *   <li>{@code POST /api/v1/forwarders} - Register a new forwarder</li>
+ *   <li>{@code POST /api/v1/forwarders/{id}/heartbeat} - Receive heartbeat</li>
+ *   <li>{@code GET /api/v1/forwarders/{id}/metrics} - Get forwarder metrics</li>
+ * </ul>
+ *
+ * <p><b>SECURITY:</b></p>
+ * <ul>
+ *   <li>Registration and heartbeat require FORWARDER authority (X-API-KEY)</li>
+ *   <li>List and get endpoints require authenticated user</li>
  * </ul>
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
  * @see ForwarderService
+ * @see com.monitoring.logforwarder.entity.Forwarder
+ * @see com.monitoring.logforwarder.security.ForwarderAuthFilter
  */
 @Slf4j
 @RestController

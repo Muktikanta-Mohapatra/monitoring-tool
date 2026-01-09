@@ -21,21 +21,89 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Kafka consumer service for processing messages from various topics.
+ * Kafka consumer service that processes messages from all Kafka topics and triggers persistence/actions.
  *
- * <p><b>Purpose:</b> Consumes and processes messages from Kafka topics including
- * events, alerts, metrics, audit logs, and notifications.</p>
+ * <p><b>PURPOSE:</b></p>
+ * This is the CONSUMPTION side of the Kafka messaging pipeline. It listens to multiple topics
+ * and routes messages to appropriate service handlers for persistence and processing.
+ * This decouples ingestion (fast, async ACK) from persistence (slower, durable).
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>ARCHITECTURE POSITION:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                    EventConsumer - KAFKA MESSAGE ROUTER                         │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  Kafka Topics                      EventConsumer (this class)                   │
+ * │                                                                                 │
+ * │  ┌──────────────┐                                                               │
+ * │  │ "events"     │ ──▶ consumeEvent() ──▶ EventService.processEventFromKafkaAsync│
+ * │  │ (10 threads) │                              │                                │
+ * │  └──────────────┘                              ▼                                │
+ * │                                         ClickHouse INSERT                       │
+ * │                                                                                 │
+ * │  ┌──────────────┐                                                               │
+ * │  │ "alerts"     │ ──▶ consumeAlert() ──▶ AlertService.processAlertFromKafka     │
+ * │  │ (5 threads)  │                              │                                │
+ * │  └──────────────┘                              ▼                                │
+ * │                                         PostgreSQL INSERT + Notify              │
+ * │                                                                                 │
+ * │  ┌──────────────┐                                                               │
+ * │  │ "metrics"    │ ──▶ consumeMetrics() ──▶ MetricsService.processMetrics        │
+ * │  │ (5 threads)  │                                                               │
+ * │  └──────────────┘                                                               │
+ * │                                                                                 │
+ * │  ┌──────────────┐                                                               │
+ * │  │ "audit-logs" │ ──▶ consumeAuditLog() ──▶ AuditService.processAuditLog        │
+ * │  │ (3 threads)  │                                                               │
+ * │  └──────────────┘                                                               │
+ * │                                                                                 │
+ * │  ┌──────────────┐                                                               │
+ * │  │"notifications"│ ──▶ consumeNotification() ──▶ NotificationService.send       │
+ * │  │ (3 threads)  │                                                               │
+ * │  └──────────────┘                                                               │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>ACKNOWLEDGMENT STRATEGY:</b></p>
+ * Uses MANUAL acknowledgment for at-least-once delivery guarantees:
+ * <ol>
+ *   <li>Message received from Kafka (offset NOT committed)</li>
+ *   <li>Process message (e.g., insert to ClickHouse)</li>
+ *   <li>On SUCCESS: {@code acknowledgment.acknowledge()} commits offset</li>
+ *   <li>On FAILURE: Offset NOT committed, message will be redelivered</li>
+ * </ol>
+ *
+ * <p><b>CONCURRENCY:</b></p>
  * <ul>
- *   <li>Listens to: events, alerts, metrics, audit-logs, notifications</li>
- *   <li>Uses @KafkaListener for declarative message handling</li>
- *   <li>Delegates processing to appropriate services</li>
+ *   <li><b>events:</b> 10 concurrent consumers (high throughput)</li>
+ *   <li><b>alerts:</b> 5 concurrent consumers</li>
+ *   <li><b>metrics:</b> 5 concurrent consumers</li>
+ *   <li><b>audit-logs:</b> 3 concurrent consumers</li>
+ *   <li><b>notifications:</b> 3 concurrent consumers</li>
+ * </ul>
+ *
+ * <p><b>CONSUMER GROUP:</b></p>
+ * All listeners use the same consumer group (configured via {@code spring.kafka.consumer.group-id}),
+ * ensuring messages are load-balanced across instances and each message is processed exactly once
+ * per consumer group.
+ *
+ * <p><b>PRODUCED BY:</b></p>
+ * Messages in these topics are produced by {@link EventProducer}:
+ * <ul>
+ *   <li>{@link EventProducer#publishEvent} → "events" topic</li>
+ *   <li>{@link EventProducer#publishAlert} → "alerts" topic</li>
+ *   <li>{@link EventProducer#publishMetrics} → "metrics" topic</li>
+ *   <li>{@link EventProducer#publishAuditLog} → "audit-logs" topic</li>
+ *   <li>{@link EventProducer#publishNotification} → "notifications" topic</li>
  * </ul>
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
+ * @see EventProducer
+ * @see EventService#processEventFromKafkaAsync
  */
 @Slf4j
 @Service

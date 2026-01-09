@@ -19,6 +19,36 @@ import jakarta.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.util.Properties;
 
+/**
+ * Configuration class for ClickHouse database connectivity.
+ *
+ * <p><b>Purpose:</b> Configures the ClickHouse data source, entity manager, and transaction
+ * manager for time-series event storage. ClickHouse is the primary storage for high-volume
+ * log events due to its columnar storage and fast aggregation capabilities.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses HikariCP connection pool for efficient connection management</li>
+ *   <li>Configured as PRIMARY data source (events stored here by default)</li>
+ *   <li>No-op transaction manager since ClickHouse doesn't support transactions</li>
+ *   <li>Batch inserts optimized with configurable batch/fetch sizes</li>
+ *   <li>Prepared statement caching enabled for query performance</li>
+ * </ul>
+ *
+ * <p><b>Configuration Properties:</b></p>
+ * <ul>
+ *   <li>{@code spring.datasource.clickhouse.jdbc-url} - ClickHouse JDBC URL</li>
+ *   <li>{@code spring.datasource.clickhouse.username/password} - Credentials</li>
+ *   <li>{@code spring.datasource.clickhouse.hikari.*} - Connection pool settings</li>
+ *   <li>{@code app.batch.jdbc-batch-size} - Hibernate batch insert size (default: 1000)</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ClickHouseNoOpTransactionManager
+ * @see com.monitoring.logforwarder.repository.clickhouse.ClickHouseEventRepository
+ */
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(

@@ -7,6 +7,16 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * Message object for WebSocket acknowledgment responses.
+ *
+ * <p><b>Purpose:</b> Represents an acknowledgment of a client request
+ * with status and optional processed count information.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Data
 @Builder
 @NoArgsConstructor

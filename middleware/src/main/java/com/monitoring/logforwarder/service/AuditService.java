@@ -16,6 +16,24 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Service for audit logging and compliance tracking.
+ *
+ * <p><b>Purpose:</b> Records all security-relevant actions for compliance auditing,
+ * including user logins, API key usage, configuration changes, and alert acknowledgments.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Async logging to prevent blocking request threads</li>
+ *   <li>Stores in PostgreSQL for transactional integrity</li>
+ *   <li>Records user ID, action, resource, status, IP, and user agent</li>
+ *   <li>Retention managed by DataCleanupScheduler (default: 90 days)</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Service
 @Transactional(value = "postgresqlTransactionManager")

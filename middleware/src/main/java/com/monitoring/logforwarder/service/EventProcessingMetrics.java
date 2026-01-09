@@ -9,6 +9,27 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Service for tracking event processing pipeline metrics.
+ *
+ * <p><b>Purpose:</b> Provides atomic counters for tracking events through the entire
+ * processing pipeline from ingestion to persistence, enabling monitoring and debugging.</p>
+ *
+ * <p><b>Tracked Metrics:</b></p>
+ * <ul>
+ *   <li><b>eventsIngested:</b> Events received from HTTP/gRPC endpoints</li>
+ *   <li><b>eventsQueued:</b> Events added to EventBatchProcessor queue</li>
+ *   <li><b>eventsPublishedToKafka:</b> Events successfully published to Kafka</li>
+ *   <li><b>eventsConsumedFromKafka:</b> Events consumed from Kafka</li>
+ *   <li><b>eventsPersisted:</b> Events successfully written to ClickHouse</li>
+ *   <li><b>eventsDuplicate:</b> Duplicate events detected and skipped</li>
+ *   <li><b>eventsFailed:</b> Events that failed processing</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Service
 @Getter

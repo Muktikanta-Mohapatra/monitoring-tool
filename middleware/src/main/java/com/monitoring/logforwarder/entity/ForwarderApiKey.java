@@ -11,6 +11,23 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * JPA entity representing a forwarder API key.
+ *
+ * <p><b>Purpose:</b> Stores API keys for LogForwarder authentication with
+ * BCrypt-hashed keys, status tracking, and expiration management.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Table: forwarder_api_keys</li>
+ *   <li>Unique index on api_key_hash</li>
+ *   <li>Status values: ACTIVE, REVOKED, EXPIRED</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Entity
 @Table(name = "forwarder_api_keys", indexes = {
     @Index(name = "idx_forwarder_id", columnList = "forwarder_id"),

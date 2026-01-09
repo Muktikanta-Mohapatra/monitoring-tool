@@ -11,6 +11,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JPA repository for ForwarderApiKey entity operations in PostgreSQL.
+ *
+ * <p><b>Purpose:</b> Manages API keys for LogForwarder authentication including
+ * key lookup, status filtering, and expiration queries.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Repository
 public interface ForwarderApiKeyRepository extends JpaRepository<ForwarderApiKey, Long> {
 

@@ -6,6 +6,23 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Manager for WebSocket event subscriptions and session tracking.
+ *
+ * <p><b>Purpose:</b> Tracks active WebSocket subscriptions per user/session,
+ * manages subscription limits, and provides lookup for targeted message delivery.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Thread-safe subscription storage using ConcurrentHashMap</li>
+ *   <li>Maximum 50 subscriptions per user to prevent abuse</li>
+ *   <li>Automatic cleanup on session disconnect</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Component
 public class EventSubscriptionManager {

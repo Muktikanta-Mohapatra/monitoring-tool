@@ -8,6 +8,16 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * Message object for WebSocket metrics updates.
+ *
+ * <p><b>Purpose:</b> Represents system or forwarder metrics broadcast to WebSocket clients
+ * including metric type, value, tags, and aggregated statistics.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Data
 @Builder
 @NoArgsConstructor

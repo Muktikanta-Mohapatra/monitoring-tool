@@ -18,6 +18,34 @@ import jakarta.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.util.Properties;
 
+/**
+ * Configuration class for PostgreSQL database connectivity.
+ *
+ * <p><b>Purpose:</b> Configures the PostgreSQL data source, entity manager, and transaction
+ * manager for relational data storage. PostgreSQL stores users, alerts, forwarders, API keys,
+ * and audit logs - data requiring ACID transactions and referential integrity.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses HikariCP connection pool for efficient connection management</li>
+ *   <li>Full transaction support via JpaTransactionManager</li>
+ *   <li>Separate entity manager from ClickHouse for multi-database support</li>
+ *   <li>Repositories in {@code repository.postgresql} package use this data source</li>
+ * </ul>
+ *
+ * <p><b>Configuration Properties:</b></p>
+ * <ul>
+ *   <li>{@code spring.datasource.postgresql.url} - PostgreSQL JDBC URL</li>
+ *   <li>{@code spring.datasource.postgresql.username/password} - Credentials</li>
+ *   <li>{@code spring.datasource.postgresql.hikari.*} - Connection pool settings</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ClickHouseDataSourceConfig
+ * @see com.monitoring.logforwarder.repository.postgresql
+ */
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(

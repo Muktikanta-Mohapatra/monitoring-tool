@@ -11,6 +11,16 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * JPA repository for Alert entity operations in PostgreSQL.
+ *
+ * <p><b>Purpose:</b> Provides CRUD and query operations for alerts including
+ * filtering by status, severity, rule, and time range.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Repository
 public interface AlertRepository extends JpaRepository<Alert, Long> {
 

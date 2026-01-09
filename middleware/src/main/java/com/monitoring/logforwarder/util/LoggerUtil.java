@@ -4,6 +4,23 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Utility class for structured logging with MDC context support.
+ *
+ * <p><b>Purpose:</b> Provides logging helper methods with MDC (Mapped Diagnostic Context)
+ * support for adding contextual information to log entries.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #logInfo}, {@link #logDebug}, {@link #logWarn}, {@link #logError} - Level-specific logging</li>
+ *   <li>{@link #addContext} - Add MDC context key-value pair</li>
+ *   <li>{@link #clearContext} - Clear all MDC context</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 public class LoggerUtil {
 

@@ -8,6 +8,27 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Builder utility for creating standardized API responses.
+ *
+ * <p><b>Purpose:</b> Provides static factory methods for creating consistent
+ * {@link ApiResponseDTO} objects wrapped in {@link ResponseEntity} with appropriate
+ * HTTP status codes.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #success} - HTTP 200 OK response</li>
+ *   <li>{@link #created} - HTTP 201 Created response</li>
+ *   <li>{@link #accepted} - HTTP 202 Accepted response</li>
+ *   <li>{@link #notFound} - HTTP 404 Not Found response</li>
+ *   <li>{@link #badRequest} - HTTP 400 Bad Request response</li>
+ *   <li>{@link #error} - HTTP 500 Internal Server Error response</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public final class ApiResponseBuilder {
 
     private ApiResponseBuilder() {

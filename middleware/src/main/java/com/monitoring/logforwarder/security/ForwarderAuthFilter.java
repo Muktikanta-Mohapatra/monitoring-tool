@@ -26,6 +26,106 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * Security filter for authenticating LogForwarder agents using API keys.
+ *
+ * <p><b>PURPOSE:</b></p>
+ * This filter authenticates incoming HTTP requests from LogForwarder agents to the
+ * {@code /api/v1/events/batch} endpoint. It validates the X-API-KEY header against
+ * stored API keys and establishes a Spring Security authentication context.
+ *
+ * <p><b>ARCHITECTURE POSITION:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                    ForwarderAuthFilter - API KEY AUTHENTICATION                 │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  LogForwarder (Rust)                                                            │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ HTTP POST /api/v1/events/   │                                                │
+ * │  │ batch                       │                                                │
+ * │  │ Headers:                    │                                                │
+ * │  │   X-API-KEY: <api_key>      │                                                │
+ * │  │   Content-Type: application/│                                                │
+ * │  │     json                    │                                                │
+ * │  └─────────────┬───────────────┘                                                │
+ * │                │                                                                │
+ * │                ▼                                                                │
+ * │  ┌─────────────────────────────┐                                                │
+ * │  │ ForwarderAuthFilter         │ ←── THIS CLASS                                 │
+ * │  │ (this class)                │                                                │
+ * │  └─────────────┬───────────────┘                                                │
+ * │                │                                                                │
+ * │       ┌────────┴────────┐                                                       │
+ * │       ▼                 ▼                                                       │
+ * │  [API Key Missing] [API Key Present]                                            │
+ * │       │                 │                                                       │
+ * │       ▼                 ▼                                                       │
+ * │  401 Unauthorized  validateApiKey()                                             │
+ * │                         │                                                       │
+ * │           ┌─────────────┴──────────────┐                                        │
+ * │           ▼                            ▼                                        │
+ * │      [Invalid/Expired]            [Valid]                                       │
+ * │           │                            │                                        │
+ * │           ▼                            ▼                                        │
+ * │      401 Unauthorized         Set SecurityContext                               │
+ * │                                        │                                        │
+ * │                                        ▼                                        │
+ * │                               Check Rate Limit                                  │
+ * │                                        │                                        │
+ * │                         ┌──────────────┴──────────────┐                         │
+ * │                         ▼                             ▼                         │
+ * │                    [Exceeded]                    [Allowed]                      │
+ * │                         │                             │                         │
+ * │                         ▼                             ▼                         │
+ * │                  429 Too Many               EventController                     │
+ * │                    Requests                  .ingestEventBatch()                │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>AUTHENTICATION FLOW:</b></p>
+ * <ol>
+ *   <li>Extract X-API-KEY header from request</li>
+ *   <li>If missing → Return 401 Unauthorized</li>
+ *   <li>Lookup API key hash in PostgreSQL (ForwarderApiKey table)</li>
+ *   <li>Validate using BCrypt password matching</li>
+ *   <li>Check key status (ACTIVE) and expiration date</li>
+ *   <li>If invalid → Return 401 with reason</li>
+ *   <li>Check rate limit for this API key</li>
+ *   <li>If exceeded → Return 429 Too Many Requests</li>
+ *   <li>Set authentication in SecurityContext with FORWARDER authority</li>
+ *   <li>Update last_used_at timestamp on API key</li>
+ *   <li>Continue to EventController</li>
+ * </ol>
+ *
+ * <p><b>APPLIES TO:</b></p>
+ * Only {@code POST /api/v1/events/batch} endpoint. Other endpoints use JWT authentication
+ * via {@link JwtAuthenticationFilter}.
+ *
+ * <p><b>API KEY SECURITY:</b></p>
+ * <ul>
+ *   <li>API keys are stored as BCrypt hashes (strength 12)</li>
+ *   <li>Plain-text keys are never stored or logged</li>
+ *   <li>Failed attempts are logged with masked key for debugging</li>
+ *   <li>All attempts are audited via AuditService</li>
+ * </ul>
+ *
+ * <p><b>RATE LIMITING:</b></p>
+ * Uses token bucket algorithm via {@link ForwarderRateLimiter}. Each API key
+ * gets a quota of requests per time window. X-Rate-Limit-Remaining header
+ * is returned to help forwarders track their remaining quota.
+ *
+ * <p><b>CALLED BY:</b></p>
+ * Spring Security filter chain - automatically invoked for all HTTP requests.
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see JwtAuthenticationFilter
+ * @see ForwarderRateLimiter
+ * @see ApiKeyValidationResult
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

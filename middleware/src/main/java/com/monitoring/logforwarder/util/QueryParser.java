@@ -5,6 +5,24 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Utility class for parsing search query syntax.
+ *
+ * <p><b>Purpose:</b> Parses user search queries into structured components
+ * for Elasticsearch query building, handling quoted strings, field operators,
+ * and wildcards.</p>
+ *
+ * <p><b>Supported Syntax:</b></p>
+ * <ul>
+ *   <li>Quoted strings: {@code "exact phrase"}</li>
+ *   <li>Field operators: {@code field=value}, {@code field:value}</li>
+ *   <li>Wildcards: {@code error*}, {@code *warning*}</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 public class QueryParser {
 

@@ -13,6 +13,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Repository for event CRUD operations in ClickHouse.
+ *
+ * <p><b>Purpose:</b> Provides async query and persistence operations for log events
+ * stored in ClickHouse time-series database.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Repository
 @RequiredArgsConstructor

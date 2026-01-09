@@ -15,6 +15,23 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+/**
+ * Repository for log event persistence and retrieval in ClickHouse.
+ *
+ * <p><b>Purpose:</b> Provides async CRUD operations for events stored in ClickHouse,
+ * optimized for high-volume time-series data with batch inserts and efficient queries.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses AsyncClickHouseTemplate for non-blocking database operations</li>
+ *   <li>Batch inserts for high throughput (configurable batch size)</li>
+ *   <li>Time-based queries optimized via ClickHouse MergeTree indices</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Repository
 @RequiredArgsConstructor

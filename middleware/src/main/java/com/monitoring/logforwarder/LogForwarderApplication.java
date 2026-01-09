@@ -9,33 +9,105 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * Main entry point for the Log Forwarder Middleware Application.
  *
- * <p><b>Purpose:</b> This class bootstraps and launches the Spring Boot application that serves as
- * the central middleware component for log forwarding, event processing, and monitoring operations.
- * It acts as the orchestrator for collecting logs from various forwarders, processing events,
- * storing data in Elasticsearch and MySQL, and providing real-time updates via WebSocket.</p>
+ * <p><b>PURPOSE:</b></p>
+ * This class bootstraps and launches the Spring Boot application that serves as the central
+ * middleware component for log forwarding, event processing, and monitoring operations.
+ * It acts as the orchestrator for collecting logs from LogForwarder agents, processing events,
+ * storing data in ClickHouse and PostgreSQL, and providing real-time updates via WebSocket.
  *
- * <p><b>Technical Details:</b></p>
+ * <p><b>SYSTEM ARCHITECTURE OVERVIEW:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                    LOG FORWARDER MIDDLEWARE - COMPLETE ARCHITECTURE             │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  ┌───────────────────────────────────────────────────────────────────────┐      │
+ * │  │                     INGESTION LAYER                                   │      │
+ * │  │  ┌─────────────────┐         ┌─────────────────┐                      │      │
+ * │  │  │ gRPC Server     │         │ HTTP REST API   │                      │      │
+ * │  │  │ (port 50051)    │         │ (port 8080)     │                      │      │
+ * │  │  │ ForwarderGrpc   │         │ EventController │                      │      │
+ * │  │  │ Service         │         │                 │                      │      │
+ * │  │  └────────┬────────┘         └────────┬────────┘                      │      │
+ * │  │           └──────────────┬────────────┘                               │      │
+ * │  │                          ▼                                            │      │
+ * │  │                   ┌──────────────┐                                    │      │
+ * │  │                   │ EventService │                                    │      │
+ * │  │                   └──────┬───────┘                                    │      │
+ * │  └──────────────────────────┼────────────────────────────────────────────┘      │
+ * │                             ▼                                                   │
+ * │  ┌───────────────────────────────────────────────────────────────────────┐      │
+ * │  │                     MESSAGING LAYER                                   │      │
+ * │  │  ┌─────────────────┐         ┌─────────────────┐                      │      │
+ * │  │  │ EventBatch      │         │ EventProducer   │                      │      │
+ * │  │  │ Processor       │ ──────▶ │ (Kafka)         │                      │      │
+ * │  │  └─────────────────┘         └────────┬────────┘                      │      │
+ * │  │                                       │                               │      │
+ * │  │                          Kafka Cluster (events, alerts, metrics)      │      │
+ * │  │                                       │                               │      │
+ * │  │                              ┌────────┴────────┐                      │      │
+ * │  │                              │ EventConsumer   │                      │      │
+ * │  │                              │ (10 threads)    │                      │      │
+ * │  │                              └────────┬────────┘                      │      │
+ * │  └──────────────────────────────────────┼────────────────────────────────┘      │
+ * │                                         ▼                                       │
+ * │  ┌───────────────────────────────────────────────────────────────────────┐      │
+ * │  │                     PERSISTENCE LAYER                                 │      │
+ * │  │  ┌─────────────────┐         ┌─────────────────┐                      │      │
+ * │  │  │ ClickHouse      │         │ PostgreSQL      │                      │      │
+ * │  │  │ (Events)        │         │ (Users, Alerts, │                      │      │
+ * │  │  │                 │         │  Forwarders)    │                      │      │
+ * │  │  └─────────────────┘         └─────────────────┘                      │      │
+ * │  └───────────────────────────────────────────────────────────────────────┘      │
+ * │                                                                                 │
+ * │  ┌───────────────────────────────────────────────────────────────────────┐      │
+ * │  │                     REAL-TIME & CACHING LAYER                         │      │
+ * │  │  ┌─────────────────┐         ┌─────────────────┐                      │      │
+ * │  │  │ WebSocket       │         │ Redis           │                      │      │
+ * │  │  │ (Dashboard)     │         │ (Caching)       │                      │      │
+ * │  │  └─────────────────┘         └─────────────────┘                      │      │
+ * │  └───────────────────────────────────────────────────────────────────────┘      │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>KEY COMPONENTS INITIALIZED:</b></p>
  * <ul>
- *   <li>{@code @SpringBootApplication} - Enables auto-configuration, component scanning, and configuration properties</li>
- *   <li>{@code @EnableCaching} - Activates Spring's caching infrastructure with Redis and Caffeine cache managers</li>
- *   <li>{@code @EnableAsync} - Enables asynchronous method execution for non-blocking operations</li>
- *   <li>{@code @EnableScheduling} - Activates scheduled task execution for batch processing, cleanup, and metrics aggregation</li>
+ *   <li><b>gRPC Server:</b> {@link com.monitoring.logforwarder.grpc.GrpcConfiguration} - Port 50051</li>
+ *   <li><b>REST API:</b> Embedded Tomcat - Port 8080</li>
+ *   <li><b>Kafka:</b> Producer & Consumer for async event processing</li>
+ *   <li><b>ClickHouse:</b> Time-series database for event storage</li>
+ *   <li><b>PostgreSQL:</b> Relational database for users, alerts, forwarders</li>
+ *   <li><b>Redis:</b> Caching and session management</li>
+ *   <li><b>WebSocket:</b> Real-time dashboard updates</li>
  * </ul>
  *
- * <p><b>Example:</b></p>
- * <pre>{@code
- * // Running the application from command line:
- * java -jar logforwarder.jar --spring.profiles.active=prod
+ * <p><b>SPRING BOOT ANNOTATIONS:</b></p>
+ * <ul>
+ *   <li>{@code @SpringBootApplication} - Enables auto-configuration, component scanning, configuration properties</li>
+ *   <li>{@code @EnableCaching} - Activates caching infrastructure (Redis + Caffeine)</li>
+ *   <li>{@code @EnableAsync} - Enables async method execution (CompletableFuture support)</li>
+ *   <li>{@code @EnableScheduling} - Activates scheduled tasks (batch flush, cleanup, metrics)</li>
+ * </ul>
  *
- * // Or programmatically:
- * SpringApplication app = new SpringApplication(LogForwarderApplication.class);
- * app.setAdditionalProfiles("dev");
- * app.run(args);
- * }</pre>
+ * <p><b>STARTUP SEQUENCE:</b></p>
+ * <ol>
+ *   <li>Spring context initialization</li>
+ *   <li>Database connection pools created (ClickHouse, PostgreSQL)</li>
+ *   <li>Kafka producer/consumer initialized</li>
+ *   <li>Redis connection established</li>
+ *   <li>gRPC server started (port 50051)</li>
+ *   <li>Embedded Tomcat started (port 8080)</li>
+ *   <li>Scheduled tasks activated</li>
+ *   <li>Application ready to accept connections</li>
+ * </ol>
  *
  * @author Log Forwarder Team
  * @version 1.0
  * @since 1.0
+ * @see com.monitoring.logforwarder.grpc.GrpcConfiguration
+ * @see com.monitoring.logforwarder.config.KafkaConfig
+ * @see com.monitoring.logforwarder.config.ClickHouseDataSourceConfig
  * @see org.springframework.boot.autoconfigure.SpringBootApplication
  */
 @SpringBootApplication

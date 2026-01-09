@@ -11,6 +11,16 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * JPA repository for AuditLog entity operations in PostgreSQL.
+ *
+ * <p><b>Purpose:</b> Provides CRUD and query operations for audit log records
+ * including user activity tracking and compliance reporting.</p>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 

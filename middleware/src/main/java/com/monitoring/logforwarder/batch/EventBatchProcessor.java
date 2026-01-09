@@ -15,6 +15,91 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Batches incoming events and publishes them to Kafka for durable processing.
+ *
+ * <p><b>PURPOSE:</b></p>
+ * This component sits between the ingestion endpoints (HTTP/gRPC) and Kafka, providing:
+ * <ul>
+ *   <li><b>Batching:</b> Groups events to reduce Kafka producer overhead</li>
+ *   <li><b>Buffering:</b> Queues events when ingestion rate exceeds processing rate</li>
+ *   <li><b>Backpressure:</b> Blocks producers if queue is full (prevents OOM)</li>
+ *   <li><b>Timed Flushing:</b> Ensures events are published even with low volume</li>
+ * </ul>
+ *
+ * <p><b>ARCHITECTURE POSITION:</b></p>
+ * <pre>
+ * ┌─────────────────────────────────────────────────────────────────────────────────┐
+ * │                     EventBatchProcessor - KAFKA BRIDGE                          │
+ * ├─────────────────────────────────────────────────────────────────────────────────┤
+ * │                                                                                 │
+ * │  EventService.saveBatch()      EventService.persistEvent()                      │
+ * │  (HTTP ingestion)              (gRPC ingestion)                                 │
+ * │          │                              │                                       │
+ * │          └──────────┬───────────────────┘                                       │
+ * │                     ▼                                                           │
+ * │          ┌──────────────────────┐                                               │
+ * │          │ EventBatchProcessor  │ ←── THIS CLASS                                │
+ * │          │ (this class)         │                                               │
+ * │          └──────────┬───────────┘                                               │
+ * │                     │                                                           │
+ * │          ┌──────────▼───────────┐                                               │
+ * │          │ LinkedBlockingQueue  │  ←── Thread-safe buffer (capacity: 10000)     │
+ * │          │ (eventQueue)         │                                               │
+ * │          └──────────┬───────────┘                                               │
+ * │                     │                                                           │
+ * │       ┌─────────────┴─────────────┐                                             │
+ * │       ▼                           ▼                                             │
+ * │  [Size >= 100]            [Timeout >= 5000ms]                                   │
+ * │       │                           │                                             │
+ * │       └───────────┬───────────────┘                                             │
+ * │                   ▼                                                             │
+ * │          ┌──────────────────────┐                                               │
+ * │          │ processBatch()       │                                               │
+ * │          │ EventProducer.       │                                               │
+ * │          │   publishEvent()     │                                               │
+ * │          └──────────┬───────────┘                                               │
+ * │                     │                                                           │
+ * │                     ▼                                                           │
+ * │            Kafka "events" topic                                                 │
+ * │                                                                                 │
+ * └─────────────────────────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p><b>FLUSH TRIGGERS:</b></p>
+ * Events are flushed to Kafka when ANY of these conditions is met:
+ * <ol>
+ *   <li><b>Batch Size:</b> Queue size reaches {@code app.batch.event-batch-size} (default: 100)</li>
+ *   <li><b>Timeout:</b> Time since last flush exceeds {@code app.batch.event-batch-timeout-ms} (default: 5000ms)</li>
+ *   <li><b>Scheduled:</b> Background scheduler runs every 5 seconds to check and flush</li>
+ * </ol>
+ *
+ * <p><b>CONFIGURATION PROPERTIES:</b></p>
+ * <ul>
+ *   <li>{@code app.batch.event-batch-size} - Events per batch before flush (default: 100)</li>
+ *   <li>{@code app.batch.event-batch-timeout-ms} - Max time before forced flush (default: 5000ms)</li>
+ *   <li>{@code app.batch.queue-capacity} - Max events in buffer before blocking (default: 10000)</li>
+ * </ul>
+ *
+ * <p><b>THREAD SAFETY:</b></p>
+ * <ul>
+ *   <li>Uses {@link LinkedBlockingQueue} for thread-safe event buffering</li>
+ *   <li>Multiple threads can call addEvent()/addEvents() concurrently</li>
+ *   <li>Flush operations are synchronized via CompletableFuture.runAsync()</li>
+ * </ul>
+ *
+ * <p><b>CALLED BY:</b></p>
+ * <ul>
+ *   <li>{@link com.monitoring.logforwarder.service.EventService#saveBatch} (line 90)</li>
+ *   <li>{@link com.monitoring.logforwarder.service.EventService#persistEvent} (line 234)</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see EventProducer
+ * @see com.monitoring.logforwarder.kafka.EventConsumer
+ */
 @Slf4j
 @Service
 public class EventBatchProcessor {

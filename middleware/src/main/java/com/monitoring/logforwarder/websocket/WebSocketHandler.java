@@ -16,6 +16,24 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * WebSocket message handler for real-time dashboard communication.
+ *
+ * <p><b>Purpose:</b> Handles STOMP messages from web clients including subscriptions,
+ * queries, and unsubscriptions for real-time log event streaming.</p>
+ *
+ * <p><b>Message Mappings:</b></p>
+ * <ul>
+ *   <li>{@code /app/subscribe} - Subscribe to event stream with optional query filter</li>
+ *   <li>{@code /app/query} - Execute ad-hoc search query</li>
+ *   <li>{@code /app/unsubscribe} - Unsubscribe from event stream</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see EventSubscriptionManager
+ */
 @Slf4j
 @Controller
 @RequiredArgsConstructor

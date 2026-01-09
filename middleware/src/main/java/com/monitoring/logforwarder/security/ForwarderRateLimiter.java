@@ -14,6 +14,32 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Rate limiter for LogForwarder agent API requests.
+ *
+ * <p><b>Purpose:</b> Implements token bucket rate limiting for the event batch ingestion
+ * endpoint to prevent any single forwarder from overwhelming the system.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Uses Bucket4j token bucket algorithm for accurate rate limiting</li>
+ *   <li>Caffeine cache for in-memory bucket storage per API key</li>
+ *   <li>Optional Redis integration for distributed rate limiting</li>
+ *   <li>Configurable events per minute limit (default: 10000)</li>
+ *   <li>Rate limit can be disabled via configuration</li>
+ * </ul>
+ *
+ * <p><b>Configuration Properties:</b></p>
+ * <ul>
+ *   <li>{@code app.forwarder.rate-limit.events-per-minute} - Max events per minute</li>
+ *   <li>{@code app.forwarder.rate-limit.enabled} - Enable/disable rate limiting</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ * @see ForwarderAuthFilter
+ */
 @Slf4j
 @Service
 public class ForwarderRateLimiter {

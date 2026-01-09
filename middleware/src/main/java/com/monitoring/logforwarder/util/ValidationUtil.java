@@ -2,6 +2,25 @@ package com.monitoring.logforwarder.util;
 
 import java.util.regex.Pattern;
 
+/**
+ * Utility class for input validation using regex patterns.
+ *
+ * <p><b>Purpose:</b> Provides validation methods for common input types including
+ * email addresses, usernames, passwords, UUIDs, API keys, IP addresses, and hostnames.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #isValidEmail} - Validate email format</li>
+ *   <li>{@link #isValidUsername} - Validate username (3-20 chars, alphanumeric)</li>
+ *   <li>{@link #isValidPassword} - Validate password strength</li>
+ *   <li>{@link #isValidUUID} - Validate UUID format</li>
+ *   <li>{@link #isValidApiKey} - Validate API key format</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class ValidationUtil {
 
     private static final Pattern EMAIL_PATTERN = 

@@ -15,6 +15,24 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Service for system and forwarder metrics collection and processing.
+ *
+ * <p><b>Purpose:</b> Collects, processes, and provides system metrics including
+ * CPU usage, memory consumption, event throughput, and forwarder-specific statistics
+ * for dashboard display and monitoring.</p>
+ *
+ * <p><b>Technical Details:</b></p>
+ * <ul>
+ *   <li>Calculates real-time events per second (EPS) based on delta counts</li>
+ *   <li>Provides JVM memory and CPU metrics via OperatingSystemMXBean</li>
+ *   <li>Processes metrics from Kafka "metrics" topic via EventConsumer</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

@@ -5,6 +5,25 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.*;
 
+/**
+ * Builder utility for constructing Elasticsearch JSON queries.
+ *
+ * <p><b>Purpose:</b> Provides a fluent API for building Elasticsearch bool queries
+ * with must, should, must_not, and filter clauses.</p>
+ *
+ * <p><b>Usage:</b></p>
+ * <pre>{@code
+ * String query = new ElasticsearchQueryBuilder()
+ *     .must("severity", "ERROR")
+ *     .filter("sourcetype", "syslog")
+ *     .rangeFilter("timestamp", start, end)
+ *     .build();
+ * }</pre>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 public class ElasticsearchQueryBuilder {
 
     private final ObjectMapper objectMapper = new ObjectMapper();

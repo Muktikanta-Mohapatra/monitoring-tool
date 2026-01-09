@@ -9,6 +9,23 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
+/**
+ * Utility class for async operation helpers and reactive conversions.
+ *
+ * <p><b>Purpose:</b> Provides utility methods for executing tasks asynchronously
+ * using virtual threads, and converting between Reactor Mono/Flux and CompletableFuture.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #executeAsyncFuture} - Execute blocking code on virtual threads</li>
+ *   <li>{@link #toCompletableFuture} - Convert Mono/Flux to CompletableFuture</li>
+ *   <li>{@link #toMono} - Convert CompletableFuture to Mono</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 public class AsyncHelper {
 

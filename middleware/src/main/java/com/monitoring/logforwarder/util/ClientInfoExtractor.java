@@ -6,6 +6,23 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+/**
+ * Utility class for extracting client information from HTTP requests.
+ *
+ * <p><b>Purpose:</b> Extracts client IP address and user agent from HTTP requests,
+ * handling proxied requests with X-Forwarded-For and X-Real-IP headers.</p>
+ *
+ * <p><b>Key Methods:</b></p>
+ * <ul>
+ *   <li>{@link #getClientIp} - Extract real client IP (handles proxies)</li>
+ *   <li>{@link #getUserAgent} - Extract User-Agent header</li>
+ *   <li>{@link #getCurrentClientIp} - Get IP from current request context</li>
+ * </ul>
+ *
+ * @author Log Forwarder Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Slf4j
 public final class ClientInfoExtractor {
 
